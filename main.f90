@@ -6,10 +6,6 @@ PROGRAM main
 
   INTEGER :: max_threads
 
-  !CALL compare_greenprd()
-  !CALL compare_cheby()
-  !STOP
-
   WRITE(*,*) 'Method of Moments solver by Jouni Makitalo'
   WRITE(*,*) 'Tampere University of Technology, Optics Laboratory'
   WRITE(*,*) '---'

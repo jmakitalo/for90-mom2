@@ -163,10 +163,10 @@ MODULE quad
        0.638444188569809,&
        0.312865496004875/),(/13,3/))
 
-!  REAL (KIND=dp), DIMENSION(13), PARAMETER :: qw = qw13
-!  REAL (KIND=dp), DIMENSION(13,3), PARAMETER :: quadFactors = quadFactors13
-  REAL (KIND=dp), DIMENSION(4), PARAMETER :: qw = qw4
-  REAL (KIND=dp), DIMENSION(4,3), PARAMETER :: quadFactors = quadFactors4
+  REAL (KIND=dp), DIMENSION(13), PARAMETER :: qw = qw13
+  REAL (KIND=dp), DIMENSION(13,3), PARAMETER :: quadFactors = quadFactors13
+!  REAL (KIND=dp), DIMENSION(4), PARAMETER :: qw = qw4
+!  REAL (KIND=dp), DIMENSION(4,3), PARAMETER :: quadFactors = quadFactors4
 
   REAL (KIND=dp), DIMENSION(4), PARAMETER :: volQw4 = (/&
        0.25_dp,&

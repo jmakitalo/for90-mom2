@@ -15,19 +15,18 @@ MODULE nlsurf
   END TYPE medium_nls
 
 CONTAINS
-  ! Evaluate E-field on surface in representation (fragment) nf.
-  FUNCTION efield_frag(mesh, nedgestot, omega, ri, x, ga, faceind, nf, r) RESULT(e)
+  ! Evaluate E-field on surface.
+  FUNCTION efield(mesh, nedgestot, omega, ri, x, faceind, r) RESULT(e)
     TYPE(mesh_container), INTENT(IN) :: mesh
     REAL (KIND=dp), INTENT(IN) :: omega
     COMPLEX (KIND=dp), INTENT(IN) :: ri
     COMPLEX (KIND=dp), DIMENSION(:), INTENT(IN) :: x
-    TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
-    INTEGER, INTENT(IN) :: nedgestot, faceind, nf
+    INTEGER, INTENT(IN) :: nedgestot, faceind
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r
 
     COMPLEX (KIND=dp), DIMENSION(3) :: e, ms
     COMPLEX (KIND=dp) :: en, divj, eps
-    INTEGER :: n, basis
+    INTEGER :: n, edgeind
 
     eps = (ri**2)*eps0
 
@@ -35,18 +34,18 @@ CONTAINS
     ms(:) = 0.0_dp
 
     DO n=1,3
-       basis = mesh%faces(faceind)%edge_indices(n)
-       basis = mesh%edges(basis)%parent_index
+       edgeind = mesh%faces(faceind)%edge_indices(n)
+       edgeind = mesh%edges(edgeind)%parent_index
 
-       divj = divj + x(basis)*rwgDiv(faceind, n, mesh)
+       divj = divj + x(edgeind)*rwgDiv(faceind, n, mesh)
 
-       ms = ms + x(nedgestot + basis)*rwg(r, faceind, n, mesh)
+       ms = ms + x(nedgestot + edgeind)*rwg(r, faceind, n, mesh)
     END DO
 
     en = divj/((0,1)*omega*eps)
 
     e = crossc(CMPLX(mesh%faces(faceind)%n,KIND=dp), ms) + mesh%faces(faceind)%n*en
-  END FUNCTION efield_frag
+  END FUNCTION efield
 
   ! Computes the inverse action on field, i.e., O_g^-1(E) where
   ! g is group element of index gai and O_g E(r) = E(p_g(r)) where
@@ -66,7 +65,7 @@ CONTAINS
     e(:) = 0.0_dp
 
     DO n=1,SIZE(ga)
-       e2 = efield_frag(mesh, nedgestot, omega, ri, x(:,n), ga, faceind, n, r)
+       e2 = efield(mesh, nedgestot, omega, ri, x(:,n), faceind, r)
 
        e = e + ga(gai)%ef(n)*MATMUL(TRANSPOSE(ga(gai)%j), e2)
     END DO
