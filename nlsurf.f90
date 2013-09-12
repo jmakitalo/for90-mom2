@@ -296,13 +296,13 @@ CONTAINS
              src_coef(index) = src_coef(index) + int1*A
              
           END DO
-       END DO
-       
-       CALL ZGETRS('N', nbasis, 1, F, nbasis, IPIV, src_coef(1:nbasis), nbasis, INFO)
-       IF(INFO/=0) THEN
-          WRITE(*,*) 'Solving of system failed!'
-          STOP
-       END IF
+       END DO       
+    END IF
+
+    CALL ZGETRS('N', nbasis, 1, F, nbasis, IPIV, src_coef(1:nbasis), nbasis, INFO)
+    IF(INFO/=0) THEN
+       WRITE(*,*) 'Solving of system failed!'
+       STOP
     END IF
 
     DEALLOCATE(F, IPIV)
