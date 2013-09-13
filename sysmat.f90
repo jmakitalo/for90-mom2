@@ -157,7 +157,7 @@ CONTAINS
           ! Add the block matrix to different sub-problems multiplied by proper
           ! field actions.
           DO nf=1,SIZE(b%ga)
-             gae = b%ga(ns)%ef(nf)**2
+             gae = b%ga(ns)%ef(nf)
 
              A(ind(1:nind),ind(1:nind),nf) = A(ind(1:nind),ind(1:nind),nf)&
                   + gae*M(1:nind,1:nind)
@@ -174,7 +174,7 @@ CONTAINS
           CALL computeH(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, M(1:nind,1:nind))
 
           DO nf=1,SIZE(b%ga)
-             gae = b%ga(ns)%ef(nf)**2
+             gae = b%ga(ns)%ef(nf)
 
              A(ind(1:nind),ind(1:nind),nf) = A(ind(1:nind),ind(1:nind),nf)&
                   + gae*M(1:nind,1:nind)
@@ -191,7 +191,7 @@ CONTAINS
           CALL computeK(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, M(1:nind,1:nind))
 
           DO nf=1,SIZE(b%ga)
-             gae = b%ga(ns)%ef(nf)**2
+             gae = b%ga(ns)%ef(nf)
 
              A((ind(1:nind)+N),ind(1:nind),nf) = A((ind(1:nind)+N),ind(1:nind),nf)&
                   + gae*M(1:nind,1:nind)
@@ -199,7 +199,7 @@ CONTAINS
                   - gae*detj*M(1:nind,1:nind)
 
              src_vec(ind(1:nind),nf) = src_vec(ind(1:nind),nf) + &
-                  gae*MATMUL(M(1:nind,1:nind), src_coef(1:nind,nd,nf))
+                  gae*detj*MATMUL(M(1:nind,1:nind), src_coef(1:nind,nd,nf))
 
              src_vec((ind(1:nind)+N),nf) = src_vec((ind(1:nind)+N),nf) - &
                   gae*MATMUL(M(1:nind,1:nind), src_coef((nind+1):(2*nind),nd,nf))

@@ -457,18 +457,18 @@ CONTAINS
        
        CALL field_mesh(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
             b%sols(wlindex)%nlx, b%ga, 2.0_dp*omega, ri)
+
     END IF
   END SUBROUTINE read_nfms
 
   SUBROUTINE read_rcst(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
-    INTEGER :: iovar, n, ntheta_rcs, nphi_rcs, wlindex
+    INTEGER :: iovar, ntheta_rcs, nphi_rcs, wlindex
     REAL (KIND=dp) :: omega
     COMPLEX (KIND=dp) :: ri
     REAL (KIND=dp), DIMENSION(:,:), ALLOCATABLE :: rcsdata
     CHARACTER (LEN=256) :: oname, numstr
-    TYPE(group_action), DIMENSION(SIZE(b%ga)) :: nlga
 
     READ(line,*) wlindex, ntheta_rcs, nphi_rcs
 
@@ -492,22 +492,11 @@ CONTAINS
        
        ! Second-harmonic frequency.
        ri = b%media(b%domains(1)%medium_index)%prop(wlindex)%shri
-
-       DO n=1,SIZE(b%ga)
-          ALLOCATE(nlga(n)%ef(SIZE(b%ga)))
-          nlga(n)%ef(:) = b%ga(n)%ef(:)**2
-          nlga(n)%j = b%ga(n)%j
-          nlga(n)%detj = b%ga(n)%detj
-          nlga(n)%id = b%ga(n)%id
-       END DO
        
-       CALL rcs(b%domains(1)%mesh, b%mesh%nedges, 2.0_dp*omega, ri, nlga, b%sols(wlindex)%nlx,&
+       CALL rcs(b%domains(1)%mesh, b%mesh%nedges, 2.0_dp*omega, ri, b%ga, b%sols(wlindex)%nlx,&
             ntheta_rcs, nphi_rcs, rcsdata)
        CALL write_data(oname, rcsdata)
 
-       DO n=1,SIZE(b%ga)
-          DEALLOCATE(nlga(n)%ef)
-       END DO
     END IF
 
     DEALLOCATE(rcsdata)

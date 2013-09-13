@@ -27,7 +27,6 @@ CONTAINS
     COMPLEX (KIND=dp), DIMENSION(:), ALLOCATABLE :: epsp
     INTEGER, DIMENSION(b%mesh%nedges) :: ind
     TYPE(medium_prop) :: mprop
-    TYPE(group_action), DIMENSION(SIZE(b%ga)) :: nlga
 
     WRITE(*,*) '--- Begin wavelength batch ---'
 
@@ -62,14 +61,6 @@ CONTAINS
     CALL print_source_info(b%src)
 
     prd => NULL()
-
-    DO n=1,SIZE(b%ga)
-       ALLOCATE(nlga(n)%ef(SIZE(b%ga)))
-       nlga(n)%ef(:) = b%ga(n)%ef(:)**2
-       nlga(n)%j = b%ga(n)%j
-       nlga(n)%detj = b%ga(n)%detj
-       nlga(n)%id = b%ga(n)%id
-    END DO
 
     ! Go through all given wavelengths.
     DO n=1, b%nwl
@@ -135,6 +126,8 @@ CONTAINS
           ALLOCATE(epsp(b%mesh%nfaces))
 
           b%sols(n)%nlx(:,:) = 0.0_dp
+          src_coef(:,:,:) = 0.0_dp
+          src_vec(:) = 0.0_dp
 
           ! epsp is the selvedge-region permittivity, which should be that external
           ! to the nonlinear medium.
@@ -197,16 +190,12 @@ CONTAINS
           ! Solve the linear system of equations, enforcing boundary conditions.
           WRITE(*,*) 'Solving system'
           CALL timer_start()
-          CALL solve_systems(b%mesh, nlga, phdx, phdy, A, b%sols(n)%nlx)
+          CALL solve_systems(b%mesh, b%ga, phdx, phdy, A, b%sols(n)%nlx)
           WRITE(*,*) sec_to_str(timer_end())
 
           ! Free up memory reserved for the auxiliary arrays.
           DEALLOCATE(src_vec, src_coef, epsp)
        END IF
-    END DO
-
-    DO n=1,SIZE(b%ga)
-       DEALLOCATE(nlga(n)%ef)
     END DO
 
     DEALLOCATE(A)

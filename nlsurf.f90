@@ -119,7 +119,8 @@ CONTAINS
     DO n=1,SIZE(ga)
        Pnls2 = Pnls_invmap(mesh, nedgestot, omega, ri, x, ga, faceind, n, nls, r)
 
-       Pnls = Pnls + CONJG(ga(n)%ef(nf)**2)*MATMUL(ga(n)%j, Pnls2)
+       !Pnls = Pnls + CONJG(ga(n)%ef(nf)**2)*MATMUL(ga(n)%j, Pnls2)
+       Pnls = Pnls + CONJG(ga(n)%ef(nf))*MATMUL(ga(n)%j, Pnls2)
     END DO
 
     Pnls = Pnls/REAL(SIZE(ga),KIND=dp)
@@ -128,6 +129,7 @@ CONTAINS
   ! src_coef = (cM, cJ)
   ! sum_n cM_n <f_m,f_n> = <f_m,n x grad'Pn>/epsp
   ! sum_n cJ_n <f_m,f_n> = -i*Omega*<f_m,Pt>
+  ! N.B. src_coef does not depend on direction of normal n.
   ! src_vec = (E0, H0)
   ! E0_n = -<div'f_m,Pn>/(2*epsp)
   ! H0_n = i*Omega*<f_m,Pt x n>/2
@@ -306,7 +308,6 @@ CONTAINS
     END IF
 
     DEALLOCATE(F, IPIV)
-
   END SUBROUTINE nlsurf_coef
 
 END MODULE nlsurf
