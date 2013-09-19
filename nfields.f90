@@ -105,20 +105,19 @@ CONTAINS
     INTEGER, INTENT(IN) :: nedgestot
     COMPLEX (KIND=dp), INTENT(IN) :: ri
 
-    INTEGER :: n, q, index, nf, nga, na
-    COMPLEX (KIND=dp), DIMENSION(3) :: et
-    COMPLEX (KIND=dp), DIMENSION(mesh%nfaces*SIZE(ga)) :: en
-    COMPLEX (KIND=dp) :: eps
-    REAL (KIND=dp), DIMENSION(mesh%nfaces*SIZE(ga)) :: eta
-    REAL (KIND=dp), DIMENSION(3) :: fn
+    INTEGER :: n, n2, q, index, nf, nga, na
+    COMPLEX (KIND=dp), DIMENSION(3,mesh%nfaces*SIZE(ga)) :: ef, hf
+    COMPLEX (KIND=dp), DIMENSION(3) :: et, ht
+    COMPLEX (KIND=dp) :: en, hn
+    COMPLEX (KIND=dp) :: eps, gae
+    REAL (KIND=dp), DIMENSION(3) :: fn, nor
+    REAL (KIND=dp) :: detj
     CHARACTER (LEN=256) :: oname, numstr
     TYPE(mesh_container) :: mesh2
 
     WRITE(*,*) 'Computing near fields on particle mesh.'
 
     eps = (ri**2)*eps0
-
-    en(:) = 0.0_dp
 
     nga = SIZE(ga)
 
@@ -135,35 +134,60 @@ CONTAINS
        DO n=1,mesh%nfaces
           mesh2%faces(n + mesh%nfaces*(na-1))%node_indices(:) = &
                mesh%faces(n)%node_indices(:) + mesh%nnodes*(na-1)
+
+          mesh2%faces(n + mesh%nfaces*(na-1))%n = MATMUL(ga(na)%j, mesh%faces(n)%n)
        END DO
     END DO
 
     DO na=1,nga
+       detj = ga(na)%detj
+
        DO n=1,mesh%nfaces
-          
+
+          n2 = n + mesh%nfaces*(na-1)
+
           et(:) = 0.0_dp
+          en = 0.0_dp
+
+          ht(:) = 0.0_dp
+          hn = 0.0_dp
+
+          nor = MATMUL(ga(na)%j, mesh%faces(n)%n)
           
           DO nf=1,nga
+             gae = ga(na)%ef(nf)
+
              DO q=1,3
                 index = mesh%faces(n)%edge_indices(q)
                 index = mesh%edges(index)%parent_index
 
-                fn = MATMUL(ga(na)%j, rwg(mesh%faces(n)%cp, n, q, mesh))
+                fn = MATMUL(ga(na)%j, crossr(mesh%faces(n)%n, rwg(mesh%faces(n)%cp, n, q, mesh)))
+
+                ht = ht - fn*x(index, nf)*CONJG(gae*detj)
+                hn = hn + rwgDiv(n, q, mesh)*x(nedgestot + index, nf)*CONJG(gae*detj)
                 
-                et = et + fn*x(nedgestot + index, nf)*ga(na)%ef(nf)*ga(na)%detj
-                en(n + mesh%nfaces*(na-1)) = en(n + mesh%nfaces*(na-1)) +&
-                     rwgDiv(n, q, mesh)*x(index, nf)*ga(na)%ef(nf)
+                et = et + fn*x(nedgestot + index, nf)*CONJG(gae)
+                en = en + rwgDiv(n, q, mesh)*x(index, nf)*CONJG(gae)
              END DO
           END DO
+
+          en = en/((0,1)*omega*eps)
+          hn = hn/((0,1)*omega*mu0)
+
+          ef(:,n2) = et + nor*en
+          hf(:,n2) = ht + nor*hn
           
-          eta(n + mesh%nfaces*(na-1)) = normc(et)          
        END DO
 
     END DO
 
-    en(:) = en(:)/((0,1)*omega*eps)
+    CALL save_vector_fields_msh(name, mesh2, ef, hf, scale)
 
-    CALL save_field_msh(name, mesh2, en, eta, scale)
+    WRITE(*,*) 'Maximum of |E| is ',&
+         MAXVAL(SQRT(ABS(ef(1,:))**2 + ABS(ef(2,:))**2 + ABS(ef(3,:))**2))
+
+
+    !CALL save_field_msh(name, mesh2, en, eta, scale)
 
     DEALLOCATE(mesh2%nodes, mesh2%faces)
 

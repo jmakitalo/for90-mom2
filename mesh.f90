@@ -1612,15 +1612,16 @@ CONTAINS
 
   END SUBROUTINE save_field_msh
 
-  SUBROUTINE save_vector_fields_msh(filename, mesh, e, h, j, m, divj, divm,&
-       divjabs, divmabs, scale)
+  SUBROUTINE save_vector_fields_msh(filename, mesh, e, h, scale)
     CHARACTER (LEN=*), INTENT(IN) :: filename
     TYPE(mesh_container), INTENT(IN) :: mesh
-    REAL (KIND=dp), DIMENSION(:,:), INTENT(IN) :: e, h, j, m
-    REAL (KIND=dp), DIMENSION(:), INTENT(IN) :: divj, divm, divjabs, divmabs
+    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: e, h
     REAL (KIND=dp), INTENT(IN) :: scale
 
-    INTEGER :: fid = 10, iovar, n
+    INTEGER :: fid = 10, iovar, n, nsteps, l
+    COMPLEX (KIND=dp) :: fn
+
+    nsteps = 25
 
     OPEN(fid, FILE=TRIM(filename), ACTION='WRITE', IOSTAT=iovar)
     IF(iovar>0) THEN
@@ -1651,125 +1652,77 @@ CONTAINS
 
     WRITE(fid,'(A12)') '$EndElements'
 
-    WRITE(fid,'(A12)') '$ElementData'
-    WRITE(fid,'(I0)') 1
-    WRITE(fid,'(A17)') '"Re(E)"'
-    WRITE(fid,'(I0)') 0
-    WRITE(fid,'(I0)') 3
-    WRITE(fid,'(I0)') 0
-    WRITE(fid,'(I0)') 3
-    WRITE(fid,'(I0)') mesh%nfaces
+    DO l=1,nsteps
+       WRITE(fid,'(A12)') '$ElementData'
+       WRITE(fid,'(I0)') 1
+       WRITE(fid,'(A17)') '"Re(E)"'
+       WRITE(fid,'(I0)') 0
+       WRITE(fid,'(I0)') 3
+       WRITE(fid,'(I0)') l-1
+       WRITE(fid,'(I0)') 3
+       WRITE(fid,'(I0)') mesh%nfaces
 
-    DO n=1,mesh%nfaces
-       WRITE(fid,'(I0,A1,3EN15.3)') n, ' ', e(:,n)
+       DO n=1,mesh%nfaces
+          WRITE(fid,'(I0,A1,3EN15.3)') n, ' ', REAL(e(:,n)*EXP(-(0,1)*2*pi*REAL(l)/nsteps))
+       END DO
+       
+       WRITE(fid,'(A15)') '$EndElementData'
     END DO
 
-    WRITE(fid,'(A15)') '$EndElementData'
+    DO l=1,nsteps
+       WRITE(fid,'(A12)') '$ElementData'
+       WRITE(fid,'(I0)') 1
+       WRITE(fid,'(A17)') '"Re(H)"'
+       WRITE(fid,'(I0)') 0
+       WRITE(fid,'(I0)') 3
+       WRITE(fid,'(I0)') l-1
+       WRITE(fid,'(I0)') 3
+       WRITE(fid,'(I0)') mesh%nfaces
 
-    WRITE(fid,'(A12)') '$ElementData'
-    WRITE(fid,'(I0)') 1
-    WRITE(fid,'(A17)') '"Re(H)"'
-    WRITE(fid,'(I0)') 0
-    WRITE(fid,'(I0)') 3
-    WRITE(fid,'(I0)') 0
-    WRITE(fid,'(I0)') 3
-    WRITE(fid,'(I0)') mesh%nfaces
-
-    DO n=1,mesh%nfaces
-       WRITE(fid,'(I0,A1,3EN15.3)') n, ' ', h(:,n)
+       DO n=1,mesh%nfaces
+          WRITE(fid,'(I0,A1,3EN15.3)') n, ' ', REAL(h(:,n)*EXP(-(0,1)*2*pi*REAL(l)/nsteps))
+       END DO
+       
+       WRITE(fid,'(A15)') '$EndElementData'
     END DO
 
-    WRITE(fid,'(A15)') '$EndElementData'
+    DO l=1,nsteps
+       WRITE(fid,'(A12)') '$ElementData'
+       WRITE(fid,'(I0)') 1
+       WRITE(fid,'(A17)') '"Re(En)"'
+       WRITE(fid,'(I0)') 0
+       WRITE(fid,'(I0)') 3
+       WRITE(fid,'(I0)') l-1
+       WRITE(fid,'(I0)') 1
+       WRITE(fid,'(I0)') mesh%nfaces
 
-    WRITE(fid,'(A12)') '$ElementData'
-    WRITE(fid,'(I0)') 1
-    WRITE(fid,'(A17)') '"Re(J)"'
-    WRITE(fid,'(I0)') 0
-    WRITE(fid,'(I0)') 3
-    WRITE(fid,'(I0)') 0
-    WRITE(fid,'(I0)') 3
-    WRITE(fid,'(I0)') mesh%nfaces
+       DO n=1,mesh%nfaces
+          fn = dotc(CMPLX(mesh%faces(n)%n,KIND=dp), e(:,n))
 
-    DO n=1,mesh%nfaces
-       WRITE(fid,'(I0,A1,3EN15.3)') n, ' ', j(:,n)
+          WRITE(fid,*) n, ' ', REAL(fn*EXP(-(0,1)*2*pi*REAL(l)/nsteps))
+       END DO
+       
+       WRITE(fid,'(A15)') '$EndElementData'
     END DO
 
-    WRITE(fid,'(A15)') '$EndElementData'
+    DO l=1,nsteps
+       WRITE(fid,'(A12)') '$ElementData'
+       WRITE(fid,'(I0)') 1
+       WRITE(fid,'(A17)') '"Re(Hn)"'
+       WRITE(fid,'(I0)') 0
+       WRITE(fid,'(I0)') 3
+       WRITE(fid,'(I0)') l-1
+       WRITE(fid,'(I0)') 1
+       WRITE(fid,'(I0)') mesh%nfaces
 
-    WRITE(fid,'(A12)') '$ElementData'
-    WRITE(fid,'(I0)') 1
-    WRITE(fid,'(A17)') '"Re(M)"'
-    WRITE(fid,'(I0)') 0
-    WRITE(fid,'(I0)') 3
-    WRITE(fid,'(I0)') 0
-    WRITE(fid,'(I0)') 3
-    WRITE(fid,'(I0)') mesh%nfaces
+       DO n=1,mesh%nfaces
+          fn = dotc(CMPLX(mesh%faces(n)%n,KIND=dp), h(:,n))
 
-    DO n=1,mesh%nfaces
-       WRITE(fid,'(I0,A1,3EN15.3)') n, ' ', m(:,n)
+          WRITE(fid,*) n, ' ', REAL(fn*EXP(-(0,1)*2*pi*REAL(l)/nsteps))
+       END DO
+       
+       WRITE(fid,'(A15)') '$EndElementData'
     END DO
-
-    WRITE(fid,'(A15)') '$EndElementData'
-
-    WRITE(fid,'(A12)') '$ElementData'
-    WRITE(fid,'(I0)') 1
-    WRITE(fid,'(A17)') '"Re(divJ)"'
-    WRITE(fid,'(I0)') 0
-    WRITE(fid,'(I0)') 3
-    WRITE(fid,'(I0)') 0
-    WRITE(fid,'(I0)') 1
-    WRITE(fid,'(I0)') mesh%nfaces
-
-    DO n=1,mesh%nfaces
-       WRITE(fid,*) n, ' ', divj(n)
-    END DO
-
-    WRITE(fid,'(A15)') '$EndElementData'
-
-    WRITE(fid,'(A12)') '$ElementData'
-    WRITE(fid,'(I0)') 1
-    WRITE(fid,'(A17)') '"Re(divM)"'
-    WRITE(fid,'(I0)') 0
-    WRITE(fid,'(I0)') 3
-    WRITE(fid,'(I0)') 0
-    WRITE(fid,'(I0)') 1
-    WRITE(fid,'(I0)') mesh%nfaces
-
-    DO n=1,mesh%nfaces
-       WRITE(fid,*) n, ' ', divm(n)
-    END DO
-
-    WRITE(fid,'(A15)') '$EndElementData'
-
-    WRITE(fid,'(A12)') '$ElementData'
-    WRITE(fid,'(I0)') 1
-    WRITE(fid,'(A17)') '"|divJ|"'
-    WRITE(fid,'(I0)') 0
-    WRITE(fid,'(I0)') 3
-    WRITE(fid,'(I0)') 0
-    WRITE(fid,'(I0)') 1
-    WRITE(fid,'(I0)') mesh%nfaces
-
-    DO n=1,mesh%nfaces
-       WRITE(fid,*) n, ' ', divjabs(n)
-    END DO
-
-    WRITE(fid,'(A15)') '$EndElementData'
-
-    WRITE(fid,'(A12)') '$ElementData'
-    WRITE(fid,'(I0)') 1
-    WRITE(fid,'(A17)') '"|divM|"'
-    WRITE(fid,'(I0)') 0
-    WRITE(fid,'(I0)') 3
-    WRITE(fid,'(I0)') 0
-    WRITE(fid,'(I0)') 1
-    WRITE(fid,'(I0)') mesh%nfaces
-
-    DO n=1,mesh%nfaces
-       WRITE(fid,*) n, ' ', divmabs(n)
-    END DO
-
-    WRITE(fid,'(A15)') '$EndElementData'
 
     CLOSE(fid)
 
