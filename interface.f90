@@ -397,20 +397,28 @@ CONTAINS
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
     INTEGER :: fid=10, iovar, n, dindex
-    REAL (KIND=dp) :: wl
-    REAL (KIND=dp), DIMENSION(3) :: r0
-    REAL (KIND=dp), DIMENSION(b%nwl) :: power
+    REAL (KIND=dp) :: wl, omega
+    REAL (KIND=dp), DIMENSION(b%nwl) :: irr
+    COMPLEX (KIND=dp) :: ri, ri_inc
+    TYPE(prdnfo), POINTER :: prd
 
-    READ(line,*) dindex, r0(1:3)
+    READ(line,*) dindex
 
-    WRITE(*,*) 'Computing diffracted power'
+    WRITE(*,*) 'Computing diffracted irradiance'
 
     DO n=1,b%nwl
        wl = b%sols(n)%wl
 
-       b%prd(b%domains(dindex)%gf_index)%cwl = find_closest(wl, b%prd(b%domains(dindex)%gf_index)%coef(:)%wl)
+       omega = 2.0_dp*pi*c0/wl
+       ri = b%media(b%domains(dindex)%medium_index)%prop(n)%ri
+       ri_inc = b%media(b%domains(1)%medium_index)%prop(n)%ri
 
-       power(n) = diffracted_power(b, n, dindex, r0, 0, 0)
+       prd => b%prd(b%domains(dindex)%gf_index)
+
+       prd%cwl = find_closest(wl, prd%coef(:)%wl)
+
+       irr(n) = diff_irradiance(b%domains(dindex)%mesh, b%ga, b%sols(n)%x,&
+            b%mesh%nedges, omega, ri, ri_inc, prd, b%src%theta, b%src%phi)
 
        WRITE(*,'(A,I0,A,I0,:)') ' Wavelength ',  n, ' of ', b%nwl
     END DO
@@ -424,10 +432,45 @@ CONTAINS
     DO n=1,b%nwl
        wl = b%sols(n)%wl
 
-       WRITE(fid,*) wl, power(n)
+       WRITE(fid,*) wl, irr(n)
     END DO
 
     CLOSE(fid)
+
+    IF(ALLOCATED(b%sols(1)%nlx)) THEN
+       DO n=1,b%nwl
+          ! SHG
+          wl = b%sols(n)%wl*0.5_dp
+          
+          omega = 2.0_dp*pi*c0/wl
+          ri = b%media(b%domains(dindex)%medium_index)%prop(n)%shri
+          ri_inc = b%media(b%domains(1)%medium_index)%prop(n)%ri
+
+          prd => b%prd(b%domains(dindex)%gf_index)
+          
+          prd%cwl = find_closest(wl, prd%coef(:)%wl)
+          
+          irr(n) = diff_irradiance(b%domains(dindex)%mesh, b%ga, b%sols(n)%nlx,&
+               b%mesh%nedges, omega, ri, ri_inc, prd, b%src%theta, b%src%phi)
+          
+          WRITE(*,'(A,I0,A,I0,:)') ' Wavelength ',  n, ' of ', b%nwl
+       END DO
+
+       OPEN(fid, FILE=(TRIM(b%name) // '-sh.dif'), ACTION='WRITE', IOSTAT=iovar)
+       IF(iovar>0) THEN
+          WRITE(*,*) 'Could not open output file for diffraction data!'
+          STOP
+       END IF
+       
+       DO n=1,b%nwl
+          wl = b%sols(n)%wl
+          
+          WRITE(fid,*) wl, irr(n)
+       END DO
+       
+       CLOSE(fid)
+    END IF
+
   END SUBROUTINE read_diff
 
   SUBROUTINE read_nfms(line, b)

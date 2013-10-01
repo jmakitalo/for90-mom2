@@ -154,9 +154,9 @@ CONTAINS
 
     DO n=1,SIZE(A,1)
        IF(id(n)>0) THEN
-          A(n,:) = A(n,:) + A(id(n),:)*phase(n)
+          A(n,:) = A(n,:) + A(id(n),:)*CONJG(phase(n))
 
-          b(n) = b(n) + b(id(n))*phase(n)
+          b(n) = b(n) + b(id(n))*CONJG(phase(n))
        END IF
     END DO
   END SUBROUTINE resolve_system_dependencies

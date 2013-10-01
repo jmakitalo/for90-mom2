@@ -16,7 +16,7 @@ MODULE greenprd
      REAL (KIND=dp), DIMENSION(:,:,:), ALLOCATABLE :: kt
      REAL (KIND=dp) :: E, k0x, k0y, wl, range
      INTEGER :: ic, jc, kc, n, m, np, npz
-     COMPLEX (KIND=dp) :: ri, k
+     COMPLEX (KIND=dp) :: ri, ri0, k
   END TYPE prdcoef
 
   TYPE prdnfo
@@ -265,7 +265,12 @@ CONTAINS
           END WHERE
 
           ! Interpolate spatial series.          
-          cspat_int = prd%coef(prd%cwl)%samples(n,m,ti,2)*(1-t) + prd%coef(prd%cwl)%samples(n,m,ti+1,2)*t
+          cspat_int = prd%coef(prd%cwl)%samples(n,m,ti,2)*(1-t) +&
+               prd%coef(prd%cwl)%samples(n,m,ti+1,2)*t
+
+          WHERE(Rnm==0)
+             cspat_int = 0.0_dp
+          END WHERE
 
           ! For far elements, add singular parts.
           IF(near==.FALSE. .AND. ABS(nn)<2 .AND. ABS(mm)<2) THEN
@@ -294,11 +299,11 @@ CONTAINS
        phase1n = phase1n*phase1
     END DO
 
-    WHERE(r(1,:)==0 .AND. r(2,:)==0 .AND. r(3,:)==0)
-       gg(1,:) = 0.0_dp
-       gg(2,:) = 0.0_dp
-       gg(3,:) = 0.0_dp
-    END WHERE
+    !WHERE(r(1,:)==0 .AND. r(2,:)==0 .AND. r(3,:)==0)
+    !   gg(1,:) = 0.0_dp
+    !   gg(2,:) = 0.0_dp
+    !   gg(3,:) = 0.0_dp
+    !END WHERE
   END SUBROUTINE vgradGprd_interp_1d
 
   SUBROUTINE import_pgfw_interp_1d(filename, prd)
@@ -307,6 +312,7 @@ CONTAINS
     INTEGER :: fid=10, n, wlind
     CHARACTER (LEN=32) :: tag
     COMPLEX (KIND=dp) :: k
+    REAL (KIND=dp) :: k0
     INTEGER :: a,b,c,d,aa,bb
 
     WRITE(*,*) 'Importing periodic Green function data'
@@ -361,6 +367,7 @@ CONTAINS
        READ(fid,*) tag, wlind
        READ(fid,*) tag, prd%coef(n)%wl
        READ(fid,*) tag, prd%coef(n)%ri
+       READ(fid,*) tag, prd%coef(n)%ri0
        READ(fid,*) tag, prd%coef(n)%E
        READ(fid,*) tag, prd%coef(n)%np
        READ(fid,*) tag, prd%coef(n)%npz
@@ -370,8 +377,10 @@ CONTAINS
        ! Precompute wavenumbers and vectors.
        k = prd%coef(n)%ri*2.0_dp*pi/prd%coef(n)%wl
        prd%coef(n)%k = k
-       prd%coef(n)%k0x = SIN(prd%pwtheta)*COS(prd%pwphi)*k
-       prd%coef(n)%k0y = SIN(prd%pwtheta)*SIN(prd%pwphi)*k
+
+       k0 = prd%coef(n)%ri0*2.0_dp*pi/prd%coef(n)%wl
+       prd%coef(n)%k0x = SIN(prd%pwtheta)*COS(prd%pwphi)*k0
+       prd%coef(n)%k0y = SIN(prd%pwtheta)*SIN(prd%pwphi)*k0
 
        ! Allocate data for interpolants.
        ALLOCATE(prd%coef(n)%samples(prd%coef(n)%n*2+1, prd%coef(n)%m*2+1, prd%coef(n)%np, 2))

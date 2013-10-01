@@ -132,7 +132,7 @@ CONTAINS
           ! epsp is the selvedge-region permittivity, which should be that external
           ! to the nonlinear medium.
           ! Assumes external medium vacuum.
-          epsp(:) = eps0
+          !epsp(:) = eps0
 
           ! Setup periodic GF for current wavelength.
           ! Periodic GF must be setup again as it depends on wavelength,
@@ -157,6 +157,8 @@ CONTAINS
                 CYCLE
              END IF
 
+             CALL determine_epsp(b, m, n, epsp(1:b%domains(m)%mesh%nfaces))
+
              ! Get medium properties for current wavelength.
              mprop = b%media(b%domains(m)%medium_index)%prop(n)
 
@@ -169,8 +171,8 @@ CONTAINS
              ! coefficients to the surface polarization in RWG basis.
              DO nf=1,nga
                 CALL nlsurf_coef(b%domains(m)%mesh, b%mesh%nedges, omega, mprop%ri, mprop%shri,&
-                     epsp, b%sols(n)%x, b%ga, nf, mprop%nls, src_coef(1:(2*nind),m,nf),&
-                     src_vec(1:(2*nind)))
+                     epsp(1:b%domains(m)%mesh%nfaces), b%sols(n)%x, b%ga, nf, mprop%nls,&
+                     src_coef(1:(2*nind),m,nf), src_vec(1:(2*nind)))
 
                 ! Place the source vector elements to proper places by the use of
                 ! the edge index mappings.
@@ -257,5 +259,47 @@ CONTAINS
        END IF
     END DO
   END FUNCTION is_nonlinear
+
+  SUBROUTINE determine_epsp(b, dindex, wlindex, epsp)
+    TYPE(batch), INTENT(IN) :: b
+    INTEGER, INTENT(IN) :: dindex, wlindex
+    COMPLEX (KIND=dp), DIMENSION(:), INTENT(INOUT) :: epsp
+    COMPLEX (KIND=dp) :: ri
+    LOGICAL :: found_face
+
+    INTEGER :: n, m, l, parent
+
+    DO n=1,b%domains(dindex)%mesh%nfaces
+       parent = b%domains(dindex)%mesh%faces(n)%parent_index
+
+       found_face = .FALSE.
+
+       DO m=1,SIZE(b%domains)
+          IF(m==dindex) THEN
+             CYCLE
+          END IF
+
+          DO l=1,b%domains(m)%mesh%nfaces
+             IF(b%domains(m)%mesh%faces(l)%parent_index==parent) THEN
+                ri = b%media( b%domains(m)%medium_index )%prop(wlindex)%ri
+                epsp(n) = (ri**2)*eps0
+
+                found_face = .TRUE.
+
+                EXIT
+             END IF
+          END DO
+
+          IF(found_face) THEN
+             EXIT
+          END IF
+       END DO
+
+       IF(found_face==.FALSE.) THEN
+          WRITE(*,*) 'Could not find epsp!'
+          STOP
+       END IF
+    END DO
+  END SUBROUTINE determine_epsp
 
 END MODULE solver
