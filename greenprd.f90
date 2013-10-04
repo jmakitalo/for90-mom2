@@ -41,8 +41,8 @@ CONTAINS
     REAL (KIND=dp), INTENT(IN) :: x1, x2
     INTEGER, INTENT(IN) :: n, nx
     REAL (KIND=dp), DIMENSION(nx), INTENT(IN) :: x
-    INTEGER, DIMENSION(nx), INTENT(OUT) :: si
-    REAL (KIND=dp), DIMENSION(nx), INTENT(OUT) :: t
+    INTEGER, DIMENSION(nx), INTENT(INOUT) :: si
+    REAL (KIND=dp), DIMENSION(nx), INTENT(INOUT) :: t
 
     REAL (KIND=dp) :: l
 
@@ -134,12 +134,12 @@ CONTAINS
           CALL interpIndex(0.0_dp, range, Rnm, npoints, nrp, ti, t)
         
           ! Interpolate spatial series.
-          g = g + prd%coef(prd%cwl)%samples(n,m,ti,1)*(1-t) &
-               + prd%coef(prd%cwl)%samples(n,m,ti+1,1)*t
+          g = g + prd%coef(prd%cwl)%samples(1,ti,m,n)*(1-t) &
+               + prd%coef(prd%cwl)%samples(1,ti+1,m,n)*t
 
           ! Interpolate spectral series.
-          g = g + (prd%coef(prd%cwl)%samplesz(n,m,tzi,1)*(1-tz) &
-               + prd%coef(prd%cwl)%samplesz(n,m,tzi+1,1)*tz)*phase
+          g = g + (prd%coef(prd%cwl)%samplesz(1,tzi,m,n)*(1-tz) &
+               + prd%coef(prd%cwl)%samplesz(1,tzi+1,m,n)*tz)*phase
 
           ! For far elements, add singular parts.
           IF(near==.FALSE. .AND. ABS(nn)<2 .AND. ABS(mm)<2) THEN
@@ -265,8 +265,8 @@ CONTAINS
           END WHERE
 
           ! Interpolate spatial series.          
-          cspat_int = prd%coef(prd%cwl)%samples(n,m,ti,2)*(1-t) +&
-               prd%coef(prd%cwl)%samples(n,m,ti+1,2)*t
+          cspat_int = prd%coef(prd%cwl)%samples(2,ti,m,n)*(1-t) +&
+               prd%coef(prd%cwl)%samples(2,ti+1,m,n)*t
 
           WHERE(Rnm==0)
              cspat_int = 0.0_dp
@@ -286,8 +286,10 @@ CONTAINS
           END IF
 
           ! Interpolate spectral series.
-          cspect_int = prd%coef(prd%cwl)%samplesz(n,m,tzi,2)*(1-tz) + prd%coef(prd%cwl)%samplesz(n,m,tzi+1,2)*tz
-          cspecz_int = prd%coef(prd%cwl)%samplesz(n,m,tzi,3)*(1-tz) + prd%coef(prd%cwl)%samplesz(n,m,tzi+1,3)*tz
+          cspect_int = prd%coef(prd%cwl)%samplesz(2,tzi,m,n)*(1-tz) +&
+               prd%coef(prd%cwl)%samplesz(2,tzi+1,m,n)*tz
+          cspecz_int = prd%coef(prd%cwl)%samplesz(3,tzi,m,n)*(1-tz) +&
+               prd%coef(prd%cwl)%samplesz(3,tzi+1,m,n)*tz
           
           gg(1,:) = gg(1,:) + cspat_int*xnm + cspect_int*phase*kt(1)
           gg(2,:) = gg(2,:) + cspat_int*ynm + cspect_int*phase*kt(2)
@@ -313,7 +315,7 @@ CONTAINS
     CHARACTER (LEN=32) :: tag
     COMPLEX (KIND=dp) :: k
     REAL (KIND=dp) :: k0
-    INTEGER :: a,b,c,d,aa,bb
+    INTEGER :: a,b,aa,bb
 
     WRITE(*,*) 'Importing periodic Green function data'
 
@@ -383,8 +385,8 @@ CONTAINS
        prd%coef(n)%k0y = SIN(prd%pwtheta)*SIN(prd%pwphi)*k0
 
        ! Allocate data for interpolants.
-       ALLOCATE(prd%coef(n)%samples(prd%coef(n)%n*2+1, prd%coef(n)%m*2+1, prd%coef(n)%np, 2))
-       ALLOCATE(prd%coef(n)%samplesz(prd%coef(n)%n*2+1, prd%coef(n)%m*2+1, prd%coef(n)%npz, 3))
+       ALLOCATE(prd%coef(n)%samples(2, prd%coef(n)%np, prd%coef(n)%m*2+1, prd%coef(n)%n*2+1))
+       ALLOCATE(prd%coef(n)%samplesz(3, prd%coef(n)%npz, prd%coef(n)%m*2+1, prd%coef(n)%n*2+1))
 
        ! Allocate data for precomputed variables.
        ALLOCATE(prd%coef(n)%rho(1+2*prd%coef(n)%n, 1+2*prd%coef(n)%m, 2))
@@ -404,26 +406,10 @@ CONTAINS
        END DO
 
        ! Read spatial part samples of PGF.
-       DO a=1,2
-          DO b=1,prd%coef(n)%np
-             DO c=1,(2*prd%coef(n)%m+1)
-                DO d=1,(2*prd%coef(n)%n+1)
-                   READ(fid,*) prd%coef(n)%samples(d,c,b,a)
-                END DO
-             END DO
-          END DO
-       END DO
+       READ(fid,*) prd%coef(n)%samples(:,:,:,:)
 
        ! Read spectral part samples of PGF.
-       DO a=1,3
-          DO b=1,prd%coef(n)%npz
-             DO c=1,(2*prd%coef(n)%m+1)
-                DO d=1,(2*prd%coef(n)%n+1)
-                   READ(fid,*) prd%coef(n)%samplesz(d,c,b,a)
-                END DO
-             END DO
-          END DO
-       END DO
+       READ(fid,*) prd%coef(n)%samplesz(:,:,:,:)
 
     END DO
 

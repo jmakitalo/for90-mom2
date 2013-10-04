@@ -173,10 +173,11 @@ CONTAINS
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
     COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: x
 
-    REAL (KIND=dp) :: irr, pinc, eval_dist
+    REAL (KIND=dp) :: irr, pinc, eval_dist, k
     INTEGER :: nf
-    REAL (KIND=dp), DIMENSION(3) :: r, dir
+    REAL (KIND=dp), DIMENSION(3) :: dir
     COMPLEX (KIND=dp), DIMENSION(3) :: e, h
+    REAL (KIND=dp), DIMENSION(2) :: kt
 
     nf = 1
 
@@ -185,7 +186,13 @@ CONTAINS
     ! wavelength.
     eval_dist = 1e-6
 
-    dir = get_dir(pwtheta, pwphi)
+    !dir = get_dir(pwtheta, pwphi)
+
+    k = REAL(ri,KIND=dp)*omega/c0
+    kt = (/prd%coef(prd%cwl)%k0x, prd%coef(prd%cwl)%k0y/)
+    dir = (/kt(1), kt(2), -SQRT(k**2 - dotr(kt,kt))/)
+
+    dir = dir/normr(dir)
 
     CALL diff_fields(mesh, ga, nf, x(:,nf), nedgestot, omega, ri, prd, dir*eval_dist, e, h)
 
