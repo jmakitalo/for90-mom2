@@ -83,7 +83,7 @@ cs.o: cs.f90 source.f90 source.o
 nlsurf.o: nlsurf.f90 rwgf.f90 rwgf.o symmetry.f90 symmetry.o
 	$(COMPILER) -c nlsurf.f90
 
-dipole.o: dipole.f90 srcint.f90 srcint.o
+dipole.o: dipole.f90 srcint.f90 srcint.o nfields.f90 nfields.o
 	$(COMPILER) -c dipole.f90
 
 clean:

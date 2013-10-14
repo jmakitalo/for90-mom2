@@ -546,6 +546,54 @@ CONTAINS
 
   END SUBROUTINE read_rcst
 
+  SUBROUTINE read_plrz(line, b)
+    CHARACTER (LEN=*), INTENT(IN) :: line
+    TYPE(batch), INTENT(INOUT) :: b
+    INTEGER :: n
+    REAL (KIND=dp) :: omega, a
+    COMPLEX (KIND=dp) :: ri
+    COMPLEX (KIND=dp), DIMENSION(3) :: alpha
+    REAL (KIND=dp), DIMENSION(b%nwl,7) :: data
+    TYPE(prdnfo), POINTER :: prd
+
+    READ(line,*) a
+
+    WRITE(*,*) 'Computing polarizability'
+
+    prd => NULL()
+
+    !$OMP PARALLEL DEFAULT(NONE)&
+    !$OMP SHARED(b,data,prd,a)&
+    !$OMP PRIVATE(n,omega,ri,alpha)
+    !$OMP DO SCHEDULE(STATIC)
+    DO n=1,b%nwl
+       ri = b%media( b%domains(1)%medium_index )%prop(n)%ri
+       omega = 2*pi*c0/b%sols(n)%wl
+
+       !IF(b%domains(1)%gf_index>0) THEN
+       !   prd => b%prd(b%domains(1)%gf_index)
+       !ELSE
+       !   prd => NULL()
+       !END IF
+
+       alpha = polarizability(b%domains(1)%mesh, b%ga, b%sols(n)%x,&
+            b%mesh%nedges, omega, ri, prd, a)
+
+       data(n,1) = b%sols(n)%wl
+       data(n,2) = REAL(alpha(1),KIND=dp)
+       data(n,3) = IMAG(alpha(1))
+       data(n,4) = REAL(alpha(2),KIND=dp)
+       data(n,5) = IMAG(alpha(2))
+       data(n,6) = REAL(alpha(3),KIND=dp)
+       data(n,7) = IMAG(alpha(3))
+    END DO
+    !$OMP END DO
+    !$OMP END PARALLEL
+
+    CALL write_data(TRIM(b%name) // '-plrz.dat', data)
+
+  END SUBROUTINE read_plrz
+
   SUBROUTINE read_crst(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
@@ -677,6 +725,8 @@ CONTAINS
           CALL read_crst(line, b)
        ELSE IF(scmd=='diff') THEN
           CALL read_diff(line, b)
+       ELSE IF(scmd=='plrz') THEN
+          CALL read_plrz(line, b)
        ELSE
           WRITE(*,*) 'Unrecognized command ', scmd, '!'
        END IF
