@@ -341,6 +341,8 @@ CONTAINS
     CHARACTER (LEN=3) :: ext
     INTEGER :: nga, nfrags
 
+    b%src%pos(:) = 0.0_dp
+
     READ(line,*) token
     IF(token=='pw') THEN
        b%src%type = src_pw
@@ -417,8 +419,8 @@ CONTAINS
 
        prd%cwl = find_closest(wl, prd%coef(:)%wl)
 
-       irr(n) = diff_irradiance(b%domains(dindex)%mesh, b%ga, b%sols(n)%x,&
-            b%mesh%nedges, omega, ri, ri_inc, prd, b%src%theta, b%src%phi)
+       irr(n) = diff_irradiance(b%domains(dindex)%mesh, b%ga, dindex==1, b%src, b%sols(n)%x,&
+            b%mesh%nedges, omega, ri, ri_inc, prd)
 
        WRITE(*,'(A,I0,A,I0,:)') ' Wavelength ',  n, ' of ', b%nwl
     END DO
@@ -450,8 +452,8 @@ CONTAINS
           
           prd%cwl = find_closest(wl, prd%coef(:)%wl)
           
-          irr(n) = diff_irradiance(b%domains(dindex)%mesh, b%ga, b%sols(n)%nlx,&
-               b%mesh%nedges, omega, ri, ri_inc, prd, b%src%theta, b%src%phi)
+          irr(n) = diff_irradiance(b%domains(dindex)%mesh, b%ga, .FALSE., b%src, b%sols(n)%nlx,&
+               b%mesh%nedges, omega, ri, ri_inc, prd)
           
           WRITE(*,'(A,I0,A,I0,:)') ' Wavelength ',  n, ' of ', b%nwl
        END DO

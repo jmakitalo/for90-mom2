@@ -163,11 +163,12 @@ CONTAINS
     END DO
   END SUBROUTINE diff_fields
 
-  FUNCTION diff_irradiance(mesh, ga, x, nedgestot, omega, ri, ri_inc, prd,&
-       pwtheta, pwphi) RESULT(irr)
+  FUNCTION diff_irradiance(mesh, ga, addsrc, src, x, nedgestot, omega, ri, ri_inc, prd) RESULT(irr)
     TYPE(mesh_container), INTENT(IN) :: mesh
+    LOGICAL, INTENT(IN) :: addsrc
+    TYPE(srcdata), INTENT(IN) :: src
     COMPLEX (KIND=dp), INTENT(IN) :: ri, ri_inc
-    REAL (KIND=dp), INTENT(IN) :: omega, pwtheta, pwphi
+    REAL (KIND=dp), INTENT(IN) :: omega
     TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
     INTEGER, INTENT(IN) :: nedgestot
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
@@ -176,7 +177,7 @@ CONTAINS
     REAL (KIND=dp) :: irr, pinc, eval_dist, k
     INTEGER :: nf
     REAL (KIND=dp), DIMENSION(3) :: dir
-    COMPLEX (KIND=dp), DIMENSION(3) :: e, h
+    COMPLEX (KIND=dp), DIMENSION(3) :: e, h, einc, hinc
     REAL (KIND=dp), DIMENSION(2) :: kt
 
     nf = 1
@@ -195,6 +196,13 @@ CONTAINS
     dir = dir/normr(dir)
 
     CALL diff_fields(mesh, ga, nf, x(:,nf), nedgestot, omega, ri, prd, dir*eval_dist, e, h)
+
+    IF(addsrc) THEN
+       CALL src_fields(src, omega, ri, dir*eval_dist, einc, hinc)
+       
+       e = e + einc
+       h = h + hinc
+    END IF
 
     pinc = REAL(ri_inc,KIND=dp)/(c0*mu0)
     
