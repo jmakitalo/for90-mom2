@@ -60,14 +60,35 @@ CONTAINS
 
     iovar = 0
     READ(fid,*) wl1, nr1, ni1
+
+    IF(wl<wl1) THEN
+       WRITE(*,*) 'Wavelength below refractive index sample range!'
+       WRITE(*,*) 'Using unity refractive index.'
+       res = 1.0_dp
+       CLOSE(fid)
+       RETURN
+    END IF
+
     DO WHILE(iovar==0)
        READ(fid,*) wl2, nr2, ni2
 
-       IF(wl1<=wl .AND. wl<=wl2) THEN
+       IF(wl1<=wl .AND. wl<=wl2 .AND. wl1/=wl2) THEN
           t = (wl-wl1)/(wl2 - wl1)
           res = CMPLX(linterp(nr1, nr2, t), linterp(ni1, ni2, t))
           CLOSE(fid)
           RETURN
+       ELSE IF(wl==wl1) THEN
+          res = CMPLX(nr1, ni1)
+          CLOSE(fid)
+          RETURN
+       ELSE IF(wl==wl2) THEN
+          res = CMPLX(nr2, ni2)
+          CLOSE(fid)
+          RETURN
+       ELSE IF(wl1>wl2) THEN
+          WRITE(*,*) 'Refractive index data disordered!'
+          CLOSE(fid)
+          STOP
        END IF
 
        wl1 = wl2
@@ -77,7 +98,9 @@ CONTAINS
 
     CLOSE(fid)
 
-    WRITE(*,*) 'Could not find the requested refractive index!'
+    WRITE(*,*) 'Wavelength above refractive index sample range!'
+    WRITE(*,*) 'Using unity refractive index.'
+    res = 1.0_dp
   END FUNCTION get_refind
 
   FUNCTION find_closest(val, list) RESULT(ind)
