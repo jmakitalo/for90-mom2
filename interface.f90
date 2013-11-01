@@ -168,6 +168,8 @@ CONTAINS
     END DO
 
     WRITE(*,'(A,I0,A)') ' Created a symmetry group with ', SIZE(b%ga), ' elements.'
+
+    !CALL print_group(b%ga)
   END SUBROUTINE read_symm
 
   ! Allocate media.

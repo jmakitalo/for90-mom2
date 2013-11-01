@@ -110,19 +110,33 @@ CONTAINS
     END DO
 
     ! Generator of the 1-dimensional complex group.
+    ! Assumes that group action (matrix_rz) is a counter clockwise
+    ! rotation around z-axis.
     angle = 2.0_dp*pi/n
-    phase = EXP(-(0,1)*angle)
+    phase = EXP((0,1)*angle)
 
     ! Field actions of all representations.
-    DO k=2,n
-       DO l=2,n
-          ga(k)%ef(l) = phase**(k+l-2)
-          IF(MOD(k+l-2,n)==0) THEN
-             ga(k)%ef(l) = phase
-          END IF
+    DO k=1,n
+       DO l=1,n
+          ga(k)%ef(l) = phase**((k-1)*(l-1))
        END DO
     END DO
+
   END SUBROUTINE group_rz
+
+  SUBROUTINE print_group(ga)
+    TYPE(group_action), DIMENSION(:), ALLOCATABLE, INTENT(INOUT) :: ga
+    INTEGER :: k, l, n
+
+    n = SIZE(ga)
+
+    DO k=1,n
+       DO l=1,n
+          WRITE(*,'(F6.3," ",F6.3,"i,  ")',advance='no') ga(l)%ef(k)
+       END DO
+       WRITE(*,*) ''
+    END DO
+  END SUBROUTINE print_group
 
   ! Given groups ga1 and ga2, returns the group ga,
   ! whose elements are products of members in the two groups.
