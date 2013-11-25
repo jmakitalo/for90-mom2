@@ -16,13 +16,13 @@ CONTAINS
   ! for a range of wavelengths as specified in input structure b.
   SUBROUTINE solve_batch(b)
     TYPE(batch), INTENT(INOUT) :: b
-    INTEGER :: n, m, nbasis, dim, nf, nga, nind
+    INTEGER :: n, m, l, nbasis, dim, nf, nga, nind, nsrc
     REAL (KIND=dp) :: wl, omega
     COMPLEX (KIND=dp), DIMENSION(:,:,:), ALLOCATABLE :: A
 
     COMPLEX (KIND=dp) :: phdx, phdy, ri
     TYPE(prdnfo), POINTER :: prd
-    COMPLEX (KIND=dp), DIMENSION(:,:,:), ALLOCATABLE :: src_coef
+    COMPLEX (KIND=dp), DIMENSION(:,:,:,:), ALLOCATABLE :: src_coef
     COMPLEX (KIND=dp), DIMENSION(:), ALLOCATABLE :: src_vec
     COMPLEX (KIND=dp), DIMENSION(:), ALLOCATABLE :: epsp
     INTEGER, DIMENSION(b%mesh%nedges) :: ind
@@ -51,14 +51,20 @@ CONTAINS
        RETURN
     END IF
 
+    IF(ALLOCATED(b%src)==.FALSE.) THEN
+       WRITE(*,*) 'Set up source prior to solving!'
+       RETURN
+    END IF
+
     nbasis = b%mesh%nedges
     nga = SIZE(b%ga)
+    nsrc = SIZE(b%src)
 
     ALLOCATE(A(nbasis*2,nbasis*2,nga))
 
     WRITE(*,*) 'Name: ', TRIM(b%name)
 
-    CALL print_source_info(b%src)
+    CALL print_source_info(b%src(1))
 
     prd => NULL()
 
@@ -99,13 +105,16 @@ CONTAINS
        WRITE(*,*) sec_to_str(timer_end())
 
        ! Allocate memory for source/solution vector.
-       ALLOCATE(b%sols(n)%x(nbasis*2, nga))
+       ALLOCATE(b%sols(n)%x(nbasis*2, nga, nsrc))
 
        ! Compute excitation source vectors for each representation.
        ! Excitation is assumed to be in domain 1.
-       WRITE(*,*) 'Computing source vector'
+       WRITE(*,*) 'Computing source vectors'
+
        ri = b%media(b%domains(1)%medium_index)%prop(n)%ri
-       CALL srcvec(b%domains(1)%mesh, b%mesh%nedges, omega, ri, b%ga, b%src, b%sols(n)%x)
+       DO l=1,nsrc
+          CALL srcvec(b%domains(1)%mesh, b%mesh%nedges, omega, ri, b%ga, b%src(l), b%sols(n)%x(:,:,l))
+       END DO
 
        ! Solve the linear system of equations for each representation,
        ! enforcing possible boundary conditions.
@@ -120,13 +129,13 @@ CONTAINS
           WRITE(*,*) 'Solving nonlinear scattering'
 
           ! Allocate memory for SH solution and auxiliary arrays.
-          ALLOCATE(b%sols(n)%nlx(nbasis*2, nga))
-          ALLOCATE(src_coef(b%mesh%nedges*2,SIZE(b%domains),nga))
+          ALLOCATE(b%sols(n)%nlx(nbasis*2, nga, nsrc))
+          ALLOCATE(src_coef(b%mesh%nedges*2,SIZE(b%domains),nga,nsrc))
           ALLOCATE(src_vec(b%mesh%nedges*2))
           ALLOCATE(epsp(b%mesh%nfaces))
 
-          b%sols(n)%nlx(:,:) = 0.0_dp
-          src_coef(:,:,:) = 0.0_dp
+          b%sols(n)%nlx(:,:,:) = 0.0_dp
+          src_coef(:,:,:,:) = 0.0_dp
           src_vec(:) = 0.0_dp
 
           ! epsp is the selvedge-region permittivity, which should be that external
@@ -170,16 +179,18 @@ CONTAINS
              ! Compute part of the excitation source vector and the expansion
              ! coefficients to the surface polarization in RWG basis.
              DO nf=1,nga
-                CALL nlsurf_coef(b%domains(m)%mesh, b%mesh%nedges, omega, mprop%ri, mprop%shri,&
-                     epsp(1:b%domains(m)%mesh%nfaces), b%sols(n)%x, b%ga, nf, mprop%nls,&
-                     src_coef(1:(2*nind),m,nf), src_vec(1:(2*nind)))
+                DO l=1,nsrc
+                   CALL nlsurf_coef(b%domains(m)%mesh, b%mesh%nedges, omega, mprop%ri, mprop%shri,&
+                        epsp(1:b%domains(m)%mesh%nfaces), b%sols(n)%x(:,:,l), b%ga, nf, mprop%nls,&
+                        src_coef(1:(2*nind),m,nf,l), src_vec(1:(2*nind)))
 
-                ! Place the source vector elements to proper places by the use of
-                ! the edge index mappings.
-                b%sols(n)%nlx(ind(1:nind),nf) = b%sols(n)%nlx(ind(1:nind),nf) + src_vec(1:nind)
+                   ! Place the source vector elements to proper places by the use of
+                   ! the edge index mappings.
+                   b%sols(n)%nlx(ind(1:nind),nf,l) = b%sols(n)%nlx(ind(1:nind),nf,l) + src_vec(1:nind)
                 
-                b%sols(n)%nlx(ind(1:nind)+nbasis,nf) = b%sols(n)%nlx(ind(1:nind)+nbasis,nf) +&
-                     src_vec((nind+1):(2*nind))
+                   b%sols(n)%nlx(ind(1:nind)+nbasis,nf,l) = b%sols(n)%nlx(ind(1:nind)+nbasis,nf,l) +&
+                        src_vec((nind+1):(2*nind))
+                END DO
              END DO
           END DO
 
@@ -215,7 +226,7 @@ CONTAINS
     TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
     COMPLEX (KIND=dp), INTENT(IN) :: phdx, phdy
     COMPLEX (KIND=dp), DIMENSION(:,:,:), INTENT(INOUT) :: A
-    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(INOUT) :: x
+    COMPLEX (KIND=dp), DIMENSION(:,:,:), INTENT(INOUT) :: x
 
     INTEGER :: dim, r, nga
     INTEGER, DIMENSION(mesh%nedges*2) :: id
@@ -230,17 +241,17 @@ CONTAINS
        CALL edge_bc(mesh, ga, phdx, phdy, r, id, phase)
        
        ! Enforce the boundary conditions on matrix A and source x.
-       CALL resolve_system_dependencies(A(:,:,r), x(:,r), id, phase)
-       CALL reduce_system(A(:,:,r), x(:,r), dim, id)
+       CALL resolve_system_dependencies(A(:,:,r), x(:,r,:), id, phase)
+       CALL reduce_system(A(:,:,r), x(:,r,:), dim, id)
        
        ! Solve the remaining linear system of dimension dim.
-       CALL solve_linsys(A(1:dim,1:dim,r), x(1:dim,r))
+       CALL solve_multi_linsys(A(1:dim,1:dim,r), x(1:dim,r,:))
        
        ! Expand the solution vector.
        ! If some elements of x were deemed zero or lin. dep.
        ! put these values into the solution vectors and make
        ! its size 2*nedges.
-       CALL expand_solution(dim, id, phase, x(:,r))
+       CALL expand_solution(dim, id, phase, x(:,r,:))
     END DO
   END SUBROUTINE solve_systems
 

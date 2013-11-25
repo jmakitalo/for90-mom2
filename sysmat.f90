@@ -108,11 +108,11 @@ CONTAINS
   SUBROUTINE sysmat_pmchwt_nls(b, wlind, A, src_coef, src_vec)
     TYPE(batch), INTENT(IN) :: b
     INTEGER, INTENT(IN) :: wlind
-    COMPLEX (KIND=dp), DIMENSION(:,:,:), INTENT(IN) :: src_coef
-    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(INOUT) :: src_vec
+    COMPLEX (KIND=dp), DIMENSION(:,:,:,:), INTENT(IN) :: src_coef
+    COMPLEX (KIND=dp), DIMENSION(:,:,:), INTENT(INOUT) :: src_vec
 
     COMPLEX (KIND=dp), DIMENSION(:,:,:), INTENT(INOUT) :: A
-    INTEGER :: N, nf, ns, nd, nind
+    INTEGER :: N, nf, ns, nd, nind, nc, nsources
     INTEGER, DIMENSION(1:b%mesh%nedges) :: ind
     REAL (KIND=dp) :: omega, detj
     COMPLEX (KIND=dp) :: Zsi, ri, gae
@@ -121,6 +121,8 @@ CONTAINS
     COMPLEX (KIND=dp), DIMENSION(:,:), ALLOCATABLE :: M
 
     N = b%mesh%nedges
+
+    nsources = SIZE(src_coef,4)
 
     ! Second-harmonic frequency.
     omega = 4.0_dp*pi*c0/b%sols(wlind)%wl
@@ -164,11 +166,14 @@ CONTAINS
              A((ind(1:nind)+N),(ind(1:nind)+N),nf) = A((ind(1:nind)+N),(ind(1:nind)+N),nf)&
                   + gae*detj*Zsi*M(1:nind,1:nind)
 
-             src_vec(ind(1:nind),nf) = src_vec(ind(1:nind),nf) - &
-                  gae*MATMUL(M(1:nind,1:nind), src_coef((nind+1):(2*nind),nd,nf))
+             ! Loop through different sources.
+             DO nc=1,nsources
+                src_vec(ind(1:nind),nf,nc) = src_vec(ind(1:nind),nf,nc) - &
+                     gae*MATMUL(M(1:nind,1:nind), src_coef((nind+1):(2*nind),nd,nf,nc))
 
-             src_vec((ind(1:nind)+N),nf) = src_vec((ind(1:nind)+N),nf) - &
-                  gae*detj*MATMUL(M(1:nind,1:nind), src_coef(1:nind,nd,nf))*Zsi
+                src_vec((ind(1:nind)+N),nf,nc) = src_vec((ind(1:nind)+N),nf,nc) - &
+                     gae*detj*MATMUL(M(1:nind,1:nind), src_coef(1:nind,nd,nf,nc))*Zsi
+             END DO
           END DO
 
           CALL computeH(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, M(1:nind,1:nind))
@@ -181,11 +186,13 @@ CONTAINS
              A((ind(1:nind)+N),(ind(1:nind)+N),nf) = A((ind(1:nind)+N),(ind(1:nind)+N),nf)&
                   + gae*detj*Zsi*M(1:nind,1:nind)
 
-             src_vec(ind(1:nind),nf) = src_vec(ind(1:nind),nf) - &
-                  gae*MATMUL(M(1:nind,1:nind), src_coef((nind+1):(2*nind),nd,nf))
-
-             src_vec((ind(1:nind)+N),nf) = src_vec((ind(1:nind)+N),nf) - &
-                  gae*detj*MATMUL(M(1:nind,1:nind), src_coef(1:nind,nd,nf))*Zsi
+             DO nc=1,nsources
+                src_vec(ind(1:nind),nf,nc) = src_vec(ind(1:nind),nf,nc) - &
+                     gae*MATMUL(M(1:nind,1:nind), src_coef((nind+1):(2*nind),nd,nf,nc))
+                
+                src_vec((ind(1:nind)+N),nf,nc) = src_vec((ind(1:nind)+N),nf,nc) - &
+                     gae*detj*MATMUL(M(1:nind,1:nind), src_coef(1:nind,nd,nf,nc))*Zsi
+             END DO
           END DO
 
           CALL computeK(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, M(1:nind,1:nind))
@@ -198,11 +205,13 @@ CONTAINS
              A(ind(1:nind),(ind(1:nind)+N),nf) = A(ind(1:nind),(ind(1:nind)+N),nf)&
                   - gae*detj*M(1:nind,1:nind)
 
-             src_vec(ind(1:nind),nf) = src_vec(ind(1:nind),nf) + &
-                  gae*detj*MATMUL(M(1:nind,1:nind), src_coef(1:nind,nd,nf))
+             DO nc=1,nsources
+                src_vec(ind(1:nind),nf,nc) = src_vec(ind(1:nind),nf,nc) + &
+                     gae*detj*MATMUL(M(1:nind,1:nind), src_coef(1:nind,nd,nf,nc))
 
-             src_vec((ind(1:nind)+N),nf) = src_vec((ind(1:nind)+N),nf) - &
-                  gae*MATMUL(M(1:nind,1:nind), src_coef((nind+1):(2*nind),nd,nf))
+                src_vec((ind(1:nind)+N),nf,nc) = src_vec((ind(1:nind)+N),nf,nc) - &
+                     gae*MATMUL(M(1:nind,1:nind), src_coef((nind+1):(2*nind),nd,nf,nc))
+             END DO
           END DO
 
        END DO

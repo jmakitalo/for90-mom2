@@ -112,6 +112,48 @@ CONTAINS
     !END IF
   END SUBROUTINE far_fields
 
+  ! Radar cross-section integrated over solid angle theta_max
+  ! around the z-axis in +z-direction.
+  SUBROUTINE rcs_solangle(mesh, nedgestot, omega, ri, ga, x, theta_max, scatp)
+    TYPE(mesh_container), INTENT(IN) :: mesh
+    INTEGER, INTENT(IN) :: nedgestot
+    REAL (KIND=dp), INTENT(IN) :: omega
+    COMPLEX (KIND=dp), INTENT(IN) :: ri
+    TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
+    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: x
+    REAL (KIND=dp), INTENT(IN) :: theta_max
+
+    REAL (KIND=dp), INTENT(OUT) :: scatp
+    INTEGER, PARAMETER :: nquad = 11
+    INTEGER :: n, m
+    REAL (KIND=dp), DIMENSION(1:nquad) :: qwt, ptt, qwp, ptp
+    REAL (KIND=dp) :: p
+    COMPLEX (KIND=dp) :: et, ep, ht, hp
+
+    ! Compute weights and nodes from Simpson's rule.
+    CALL get_simpsons_weights(0.0_dp, theta_max, nquad-1, qwt)
+    CALL get_simpsons_points(0.0_dp, theta_max, nquad-1, ptt)
+    CALL get_simpsons_weights(0.0_dp, 2.0_dp*pi, nquad-1, qwp)
+    CALL get_simpsons_points(0.0_dp, 2.0_dp*pi, nquad-1, ptp)
+
+    scatp = 0.0_dp
+
+    DO n=1,nquad
+       DO m=1,nquad
+
+          CALL far_fields(mesh, nedgestot, omega, ri, ga, x, 1.0_dp,&
+               ptt(n), ptp(m), et, ep, ht, hp)
+
+          p = ABS(et)**2 + ABS(ep)**2
+
+          scatp = scatp + qwt(n)*qwp(m)*p*SIN(ptt(n))
+       END DO
+    END DO
+
+  END SUBROUTINE rcs_solangle
+
+  ! Bistatic radar-cross section a.k.a. radiated power per unit solid angle.
+  ! fdir specifies a polarization filter direction vector if filter is true.
   SUBROUTINE rcs_ext(mesh, nedgestot, omega, ri, ga, x, ntheta, nphi, filter, fdir, rcsdata)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, INTENT(IN) :: nedgestot

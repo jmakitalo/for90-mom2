@@ -148,6 +148,29 @@ CONTAINS
     END IF
   END SUBROUTINE solve_linsys
 
+  SUBROUTINE solve_multi_linsys(mat, src)
+    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(INOUT) :: mat
+    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(INOUT) :: src
+
+    INTEGER, DIMENSION(SIZE(src,1)) :: IPIV
+    INTEGER :: dim, INFO, nsrc
+
+    dim = SIZE(src,1)
+    nsrc = SIZE(src,2)
+
+    CALL ZGETRF(dim, dim, mat, dim, IPIV, INFO)
+    IF(INFO/=0) THEN
+       WRITE(*,*) 'Matrix factorization failed!'
+       STOP
+    END IF
+
+    CALL ZGETRS('N', dim, nsrc, mat, dim, IPIV, src, dim, INFO)
+    IF(INFO/=0) THEN
+       WRITE(*,*) 'Solving of system failed!'
+       STOP
+    END IF
+  END SUBROUTINE solve_multi_linsys
+
   SUBROUTINE matrix_eigenvalues(A, eigval, eigvec)
     COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: A
     COMPLEX (KIND=dp), DIMENSION(:), INTENT(INOUT) :: eigval

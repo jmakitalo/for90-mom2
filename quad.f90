@@ -352,4 +352,57 @@ CONTAINS
 
     points(1:(n+1)) = a + h*(/(i,i=0,n)/)
   END SUBROUTINE get_simpsons_points
+
+  RECURSIVE FUNCTION asqz_aux(f, a, b, eps, s, fa, fb, fc, bottom) RESULT(res)
+    COMPLEX (KIND=dp), EXTERNAL :: f
+    REAL (KIND=dp), INTENT(IN) :: a, b, eps
+    COMPLEX (KIND=dp), INTENT(IN) :: s, fa, fb, fc
+    INTEGER, INTENT(IN) :: bottom
+
+    COMPLEX (KIND=dp) :: res, fd, fe, sleft, sright, s2
+    REAL (KIND=dp) :: c, h, d, e
+
+    c = (a + b)/2
+    h = b - a
+
+    d = (a + c)/2
+    e = (c + b)/2
+
+    fd = f(d)
+    fe = f(e)
+
+    sleft = (h/12)*(fa + 4*fd + fc)
+    sright = (h/12)*(fc + 4*fe + fb)
+
+    s2 = sleft + sright
+
+    IF(bottom<=0 .OR. ABS(s2 - s)<=15*eps) THEN
+       res = s2 + (s2 - s)/15
+    ELSE
+       res = asqz_aux(f, a, c, eps/2, sleft, fa, fc, fd, bottom-1) +&
+            asqz_aux(f, c, b, eps/2, sright, fc, fb, fe, bottom-1)
+    END IF
+  END FUNCTION asqz_aux
+
+  ! Adaptive Simpson's method based on listing at
+  ! http://en.wikipedia.org/wiki/Adaptive_Simpson%27s_method#C
+  FUNCTION asqz(f, a, b, eps, maxDepth) RESULT(res)
+    COMPLEX (KIND=dp), EXTERNAL :: f
+    REAL (KIND=dp), INTENT(IN) :: a, b, eps
+    INTEGER, INTENT(IN) :: maxDepth
+
+    COMPLEX (KIND=dp) :: fa, fb, fc, s, res
+    REAL (KIND=dp) :: c, h
+
+    c = (a + b)/2
+    h = b - a
+
+    fa = f(a)
+    fb = f(b)
+    fc = f(c)
+
+    s = (h/6)*(fa + 4*fc + fb)
+
+    res = asqz_aux(f, a, b, eps, s, fa, fb, fc, maxDepth)
+  END FUNCTION asqz
 END MODULE quad

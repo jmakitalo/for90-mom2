@@ -38,7 +38,8 @@ MODULE common
   TYPE solution
      ! Solution vector. First dimension denotes basis coefficients of (J,M).
      ! Second dimension denotes sub-problems related to group representations.
-     COMPLEX (KIND=dp), DIMENSION(:,:), ALLOCATABLE :: x, nlx
+     ! Third dimension denotes excitation source.
+     COMPLEX (KIND=dp), DIMENSION(:,:,:), ALLOCATABLE :: x, nlx
 
      ! Eigenvectors of a spectral problem. First dimension denotes basis coefficients.
      ! Second dimension denotes eigenvalue index.
@@ -81,7 +82,7 @@ MODULE common
      INTEGER :: nwl
 
      ! Source data.
-     TYPE(srcdata) :: src
+     TYPE(srcdata), DIMENSION(:), ALLOCATABLE :: src
 
      ! Solution data for each wavelength.
      TYPE(solution), DIMENSION(:), ALLOCATABLE :: sols
@@ -158,6 +159,10 @@ CONTAINS
        END DO
 
        DEALLOCATE(b%media)
+    END IF
+
+    IF(ALLOCATED(b%src)) THEN
+       DEALLOCATE(b%src)
     END IF
   END SUBROUTINE delete_batch
 

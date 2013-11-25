@@ -137,7 +137,7 @@ CONTAINS
 
   SUBROUTINE resolve_system_dependencies(A, b, id, phase)
     COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(INOUT) :: A
-    COMPLEX (KIND=dp), DIMENSION(:), INTENT(INOUT) :: b
+    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(INOUT) :: b
     INTEGER, DIMENSION(:), INTENT(IN) :: id
     COMPLEX (KIND=dp), DIMENSION(:), INTENT(IN) :: phase
 
@@ -156,7 +156,7 @@ CONTAINS
        IF(id(n)>0) THEN
           A(n,:) = A(n,:) + A(id(n),:)*CONJG(phase(n))
 
-          b(n) = b(n) + b(id(n))*CONJG(phase(n))
+          b(n,:) = b(n,:) + b(id(n),:)*CONJG(phase(n))
        END IF
     END DO
   END SUBROUTINE resolve_system_dependencies
@@ -169,7 +169,7 @@ CONTAINS
   ! id: Boundary condition identifiers. SIZE(id) == nbasis*2.
   SUBROUTINE reduce_system(A, b, dim, id)
     COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(INOUT) :: A
-    COMPLEX (KIND=dp), DIMENSION(:), INTENT(INOUT) :: b
+    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(INOUT) :: b
     INTEGER, INTENT(OUT) :: dim
     INTEGER, DIMENSION(:), INTENT(IN) :: id
 
@@ -189,7 +189,7 @@ CONTAINS
 
     ! Reduce the system matrix and the source vector.
     A(1:dim,1:dim) = A(ind, ind)
-    b(1:dim) = b(ind)
+    b(1:dim,:) = b(ind,:)
 
     DEALLOCATE(ind)
   END SUBROUTINE reduce_system
@@ -202,17 +202,17 @@ CONTAINS
     INTEGER, INTENT(IN) :: dim
     INTEGER, DIMENSION(:), INTENT(IN) :: id
     COMPLEX (KIND=dp), DIMENSION(:), INTENT(IN) :: phase
-    COMPLEX (KIND=dp), DIMENSION(:), INTENT(INOUT) :: b
+    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(INOUT) :: b
 
-    COMPLEX (KIND=dp), DIMENSION(SIZE(b)) :: btmp
+    COMPLEX (KIND=dp), DIMENSION(SIZE(b,1),SIZE(b,2)) :: btmp
     INTEGER, DIMENSION(:), ALLOCATABLE :: ind
     INTEGER :: n
 
     ! Make a copy of the solution.
-    btmp(:) = b(:)
+    btmp(:,:) = b(:,:)
 
     ! Make zero the default value in the full-dimensional vector.
-    b(:) = 0.0_dp
+    b(:,:) = 0.0_dp
 
     ! Allocate array to store indices to non-zero coefficients.
     ALLOCATE(ind(dim))
@@ -221,12 +221,12 @@ CONTAINS
     ind = array_locations(id/=-1, dim)
 
     ! Add non-zero solution coefficients to proper places in the expanded form.
-    b(ind) = btmp(1:dim)
+    b(ind,:) = btmp(1:dim,:)
 
     ! Assign solution coefficients to linearly dependent couples.
-    DO n=1,SIZE(b)
+    DO n=1,SIZE(b,1)
        IF(id(n)>0) THEN
-          b(id(n)) = b(n)*phase(n)
+          b(id(n),:) = b(n,:)*phase(n)
        END IF
     END DO
 

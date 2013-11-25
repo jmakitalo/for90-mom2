@@ -335,6 +335,38 @@ CONTAINS
     READ(line,*) b%nwl, (b%sols(n)%wl, n=1,b%nwl)
   END SUBROUTINE read_wllist
 
+  SUBROUTINE read_scan_source(line, b)
+    CHARACTER (LEN=*), INTENT(IN) :: line
+    TYPE(batch), INTENT(INOUT) :: b
+    INTEGER :: npt, n, m, index
+    REAL (KIND=dp) :: sz, d
+    TYPE(srcdata) :: src
+
+    IF(ALLOCATED(b%src)==.FALSE.) THEN
+       WRITE(*,*) 'Source must be setup before specifying scanning!'
+       STOP
+    END IF
+
+    READ(line,*) sz, d, npt
+
+    src = b%src(1)
+
+    DEALLOCATE(b%src)
+
+    ALLOCATE(b%src(1:(npt*npt)))
+
+    DO n=1,npt
+       DO m=1,npt
+          index = (n-1)*npt + m
+          b%src(index) = src
+          b%src(index)%pos = (/-d/2+d*REAL(n-1,KIND=dp)/(npt-1), -d/2+d*REAL(m-1,KIND=dp)/(npt-1), sz/)
+       END DO
+    END DO
+
+    WRITE(*,*) 'Source scanning was setup'
+
+  END SUBROUTINE read_scan_source
+
   SUBROUTINE read_source(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
@@ -343,33 +375,35 @@ CONTAINS
     CHARACTER (LEN=3) :: ext
     INTEGER :: nga, nfrags
 
-    b%src%pos(:) = 0.0_dp
+    ALLOCATE(b%src(1))
+
+    b%src(1)%pos(:) = 0.0_dp
 
     READ(line,*) token
     IF(token=='pw') THEN
-       b%src%type = src_pw
-       READ(line,*) token, b%src%theta, b%src%phi, b%src%psi
-       b%src%theta = b%src%theta*degtorad
-       b%src%phi = b%src%phi*degtorad
-       b%src%psi = b%src%psi*degtorad
+       b%src(1)%type = src_pw
+       READ(line,*) token, b%src(1)%theta, b%src(1)%phi, b%src(1)%psi
+       b%src(1)%theta = b%src(1)%theta*degtorad
+       b%src(1)%phi = b%src(1)%phi*degtorad
+       b%src(1)%psi = b%src(1)%psi*degtorad
     ELSE IF(token=='focus_rad') THEN
-       b%src%type = src_focus_rad
-       READ(line,*) token, b%src%focal, b%src%waist, b%src%napr
+       b%src(1)%type = src_focus_rad
+       READ(line,*) token, b%src(1)%focal, b%src(1)%waist, b%src(1)%napr
     ELSE IF(token=='focus_x') THEN
-       b%src%type = src_focus_x
-       READ(line,*) token, b%src%focal, b%src%waist, b%src%napr
+       b%src(1)%type = src_focus_x
+       READ(line,*) token, b%src(1)%focal, b%src(1)%waist, b%src(1)%napr
     ELSE IF(token=='focus_y') THEN
-       b%src%type = src_focus_y
-       READ(line,*) token, b%src%focal, b%src%waist, b%src%napr
+       b%src(1)%type = src_focus_y
+       READ(line,*) token, b%src(1)%focal, b%src(1)%waist, b%src(1)%napr
     ELSE IF(token=='focus_hg01') THEN
-       b%src%type = src_focus_hg01
-       READ(line,*) token, b%src%focal, b%src%waist, b%src%napr
+       b%src(1)%type = src_focus_hg01
+       READ(line,*) token, b%src(1)%focal, b%src(1)%waist, b%src(1)%napr
     ELSE IF(token=='focus_azimut') THEN
-       b%src%type = src_focus_azim
-       READ(line,*) token, b%src%focal, b%src%waist, b%src%napr
+       b%src(1)%type = src_focus_azim
+       READ(line,*) token, b%src(1)%focal, b%src(1)%waist, b%src(1)%napr
     ELSE IF(token=='dipole') THEN
-       b%src%type = src_dipole
-       READ(line,*) token, b%src%pos, b%src%dmom
+       b%src(1)%type = src_dipole
+       READ(line,*) token, b%src(1)%pos, b%src(1)%dmom
     ELSE
        WRITE(*,*) 'Invalid source type!'
     END IF
@@ -421,7 +455,7 @@ CONTAINS
 
        prd%cwl = find_closest(wl, prd%coef(:)%wl)
 
-       irr(n) = diff_irradiance(b%domains(dindex)%mesh, b%ga, dindex==1, b%src, b%sols(n)%x,&
+       irr(n) = diff_irradiance(b%domains(dindex)%mesh, b%ga, dindex==1, b%src(1), b%sols(n)%x(:,:,1),&
             b%mesh%nedges, omega, ri, ri_inc, prd)
 
        WRITE(*,'(A,I0,A,I0,:)') ' Wavelength ',  n, ' of ', b%nwl
@@ -454,7 +488,7 @@ CONTAINS
           
           prd%cwl = find_closest(wl, prd%coef(:)%wl)
           
-          irr(n) = diff_irradiance(b%domains(dindex)%mesh, b%ga, .FALSE., b%src, b%sols(n)%nlx,&
+          irr(n) = diff_irradiance(b%domains(dindex)%mesh, b%ga, .FALSE., b%src(1), b%sols(n)%nlx(:,:,1),&
                b%mesh%nedges, omega, ri, ri_inc, prd)
           
           WRITE(*,'(A,I0,A,I0,:)') ' Wavelength ',  n, ' of ', b%nwl
@@ -495,7 +529,7 @@ CONTAINS
     ri = b%media(b%domains(dindex)%medium_index)%prop(wlindex)%ri
        
     CALL field_mesh(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
-         b%sols(wlindex)%x, b%ga, omega, ri)
+         b%sols(wlindex)%x(:,:,1), b%ga, omega, ri)
 
     IF(ALLOCATED(b%sols(wlindex)%nlx)) THEN
        oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-sh.msh'
@@ -503,10 +537,71 @@ CONTAINS
        ri = b%media(b%domains(dindex)%medium_index)%prop(wlindex)%shri
        
        CALL field_mesh(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
-            b%sols(wlindex)%nlx, b%ga, 2.0_dp*omega, ri)
+            b%sols(wlindex)%nlx(:,:,1), b%ga, 2.0_dp*omega, ri)
 
     END IF
   END SUBROUTINE read_nfms
+
+  SUBROUTINE read_rcs2(line, b)
+    CHARACTER (LEN=*), INTENT(IN) :: line
+    TYPE(batch), INTENT(INOUT) :: b
+    INTEGER :: iovar, npt, wlindex, n
+    REAL (KIND=dp) :: omega, theta_max
+    COMPLEX (KIND=dp) :: ri
+    REAL (KIND=dp), DIMENSION(SIZE(b%src)) :: scatp
+    CHARACTER (LEN=256) :: oname, numstr
+
+    READ(line,*) wlindex
+
+    WRITE(*,*) 'Computing scattered power'
+
+    omega = 2.0_dp*pi*c0/b%sols(wlindex)%wl
+    ri = b%media(b%domains(1)%medium_index)%prop(wlindex)%ri
+
+    npt = NINT(SQRT(REAL(SIZE(b%src))))
+
+    !$OMP PARALLEL DEFAULT(NONE)&
+    !$OMP SHARED(b,omega,ri,scatp,wlindex)&
+    !$OMP PRIVATE(n,theta_max)
+    !$OMP DO SCHEDULE(STATIC)
+    DO n=1,SIZE(b%src)
+       theta_max = ASIN(b%src(n)%napr)
+
+       CALL rcs_solangle(b%domains(1)%mesh, b%mesh%nedges, omega, ri, b%ga,&
+            b%sols(wlindex)%x(:,:,n), theta_max, scatp(n))
+    END DO
+    !$OMP END DO
+    !$OMP END PARALLEL
+
+    WRITE(numstr, '(I0)') wlindex
+    oname = TRIM(b%name) // '-wl' // TRIM(ADJUSTL(numstr)) // '-scan.dat'
+
+    CALL write_data(oname, RESHAPE(scatp,(/npt,npt/)))
+
+    IF(ALLOCATED(b%sols(wlindex)%nlx)) THEN
+       oname = TRIM(b%name) // '-wl' // TRIM(ADJUSTL(numstr)) // '-scan-sh.dat'
+       
+       ! Second-harmonic frequency.
+       ri = b%media(b%domains(1)%medium_index)%prop(wlindex)%shri
+
+       !$OMP PARALLEL DEFAULT(NONE)&
+       !$OMP SHARED(b,omega,ri,scatp,wlindex)&
+       !$OMP PRIVATE(n,theta_max)
+       !$OMP DO SCHEDULE(STATIC)
+       DO n=1,SIZE(b%src)
+          theta_max = ASIN(b%src(n)%napr)
+
+          CALL rcs_solangle(b%domains(1)%mesh, b%mesh%nedges, 2.0_dp*omega, ri, b%ga,&
+               b%sols(wlindex)%nlx(:,:,n), theta_max, scatp(n))
+       END DO
+       !$OMP END DO
+       !$OMP END PARALLEL
+
+       CALL write_data(oname, RESHAPE(scatp,(/npt,npt/)))
+
+    END IF
+
+  END SUBROUTINE read_rcs2
 
   SUBROUTINE read_rcst(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
@@ -529,7 +624,7 @@ CONTAINS
     omega = 2.0_dp*pi*c0/b%sols(wlindex)%wl
     ri = b%media(b%domains(1)%medium_index)%prop(wlindex)%ri
 
-    CALL rcs(b%domains(1)%mesh, b%mesh%nedges, omega, ri, b%ga, b%sols(wlindex)%x,&
+    CALL rcs(b%domains(1)%mesh, b%mesh%nedges, omega, ri, b%ga, b%sols(wlindex)%x(:,:,1),&
          ntheta_rcs, nphi_rcs, rcsdata)
     CALL write_data(oname, rcsdata)
 
@@ -540,7 +635,7 @@ CONTAINS
        ! Second-harmonic frequency.
        ri = b%media(b%domains(1)%medium_index)%prop(wlindex)%shri
        
-       CALL rcs(b%domains(1)%mesh, b%mesh%nedges, 2.0_dp*omega, ri, b%ga, b%sols(wlindex)%nlx,&
+       CALL rcs(b%domains(1)%mesh, b%mesh%nedges, 2.0_dp*omega, ri, b%ga, b%sols(wlindex)%nlx(:,:,1),&
             ntheta_rcs, nphi_rcs, rcsdata)
        CALL write_data(oname, rcsdata)
 
@@ -580,7 +675,7 @@ CONTAINS
        !   prd => NULL()
        !END IF
 
-       alpha = polarizability(b%domains(1)%mesh, b%ga, b%sols(n)%x,&
+       alpha = polarizability(b%domains(1)%mesh, b%ga, b%sols(n)%x(:,:,1),&
             b%mesh%nedges, omega, ri, prd, a)
 
        data(n,1) = b%sols(n)%wl
@@ -621,7 +716,7 @@ CONTAINS
        ri = b%media(b%domains(1)%medium_index)%prop(n)%ri
 
        CALL cs_prtsrf(b%domains(1)%mesh, b%mesh%nedges, omega, ri, b%ga,&
-            b%sols(n)%x, b%src, csca, cabs)
+            b%sols(n)%x(:,:,1), b%src(1), csca, cabs)
 
        data(n,1) = wl
        data(n,2) = csca
@@ -649,7 +744,7 @@ CONTAINS
           ri = b%media(b%domains(1)%medium_index)%prop(n)%shri
           
           CALL cs_prtsrf(b%domains(1)%mesh, b%mesh%nedges, 2.0_dp*omega, ri, b%ga,&
-               b%sols(n)%nlx, nlsrc, csca, cabs)
+               b%sols(n)%nlx(:,:,1), nlsrc, csca, cabs)
           
           data(n,1) = wl
           data(n,2) = csca
@@ -725,12 +820,16 @@ CONTAINS
           CALL read_nfms(line, b)
        ELSE IF(scmd=='rcst') THEN
           CALL read_rcst(line, b)
+       ELSE IF(scmd=='rcs2') THEN
+          CALL read_rcs2(line, b)
        ELSE IF(scmd=='crst') THEN
           CALL read_crst(line, b)
        ELSE IF(scmd=='diff') THEN
           CALL read_diff(line, b)
        ELSE IF(scmd=='plrz') THEN
           CALL read_plrz(line, b)
+       ELSE IF(scmd=='scan') THEN
+          CALL read_scan_source(line, b)
        ELSE
           WRITE(*,*) 'Unrecognized command ', scmd, '!'
        END IF

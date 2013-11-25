@@ -112,12 +112,15 @@ CONTAINS
     COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(INOUT) :: q
 
     INTEGER :: nweights, m, p, r, index, focustype, nr
-    COMPLEX (KIND=dp), DIMENSION(3,SIZE(ga)) :: ef, hf
+    COMPLEX (KIND=dp), DIMENSION(3,SIZE(ga),SIZE(qw),mesh%nfaces) :: ef, hf
     COMPLEX (KIND=dp), DIMENSION(3) :: emax
     COMPLEX (KIND=dp), DIMENSION(SIZE(ga)) :: Ie, Ih
     REAL (KIND=dp) :: Am, pm
     REAL (KIND=dp), DIMENSION(3,SIZE(qw)) :: qpm
     REAL (KIND=dp), DIMENSION(3) :: fm, pos
+    LOGICAL :: print_info
+
+    print_info = .FALSE.
 
     nweights = SIZE(qw)
 
@@ -131,7 +134,7 @@ CONTAINS
 
     ! If we have a focused beam, determine its type and compute
     ! maximum electric field value.
-    IF(src%type/=src_pw) THEN
+    IF(print_info .AND. src%type/=src_pw) THEN
        IF(src%type==src_focus_rad) THEN
           focustype = focustype_radial
        ELSE IF(src%type==src_focus_x) THEN
@@ -157,6 +160,23 @@ CONTAINS
        END IF
     END IF
 
+    ! Pre-compute excitation fields in parallel.
+
+    !$OMP PARALLEL DEFAULT(NONE)&
+    !$OMP SHARED(mesh,nweights,src,omega,ri,ga,ef,hf)&
+    !$OMP PRIVATE(m,qpm,r)
+    !$OMP DO SCHEDULE(STATIC)
+    DO m=1,mesh%nfaces
+       qpm = GLquad_points(m, mesh)
+
+       DO r=1,nweights
+          ! Compute the source excitation for all representations.
+          CALL src_field_frags(src, omega, ri, ga, qpm(:,r), ef(:,:,r,m), hf(:,:,r,m))
+       END DO
+    END DO
+    !$OMP END DO
+    !$OMP END PARALLEL
+
     ! Go through faces of the mesh.
     DO m=1,mesh%nfaces
        qpm = GLquad_points(m, mesh)
@@ -171,13 +191,10 @@ CONTAINS
           DO r=1,nweights
              fm = rwg(qpm(:,r), m, p, mesh)
 
-             ! Compute the source excitation for all representations.
-             CALL src_field_frags(src, omega, ri, ga, qpm(:,r), ef, hf)
-
              ! Compute inner-product integrands for each representation.
              DO nr=1,SIZE(ga)
-                Ie(nr) = Ie(nr) + qw(r)*dotc(CMPLX(fm,KIND=dp), ef(:,nr))
-                Ih(nr) = Ih(nr) + qw(r)*dotc(CMPLX(fm,KIND=dp), hf(:,nr))
+                Ie(nr) = Ie(nr) + qw(r)*dotc(CMPLX(fm,KIND=dp), ef(:,nr,r,m))
+                Ih(nr) = Ih(nr) + qw(r)*dotc(CMPLX(fm,KIND=dp), hf(:,nr,r,m))
              END DO
           END DO
         
@@ -291,89 +308,6 @@ CONTAINS
 
   END SUBROUTINE src_fields
 
-  FUNCTION focus_int(r,z,k,f,w0,theta_max,itype) RESULT(res)
-    REAL (KIND=dp), INTENT(IN) :: r, z, k, f, w0, theta_max
-    INTEGER, INTENT(IN) :: itype
-    REAL (KIND=dp) :: err, j1, j0, j2, j3, theta
-    COMPLEX (KIND=dp) :: res, prev, integ, common
-    INTEGER :: n, nintervals, besm
-    REAL (KIND=dp), DIMENSION(:), ALLOCATABLE :: weights, points
-    REAL (KIND=dp), PARAMETER :: maxerr = 1.0_dp*1D-6
-    INTEGER, PARAMETER :: maxinterv=600
-
-    nintervals = 20
-    err = 1.0_dp
-    res = 0.0_dp
-    prev = 0.0_dp
-
-    DO WHILE(err>maxerr .AND. nintervals<maxinterv)
-       ALLOCATE(weights(nintervals+1), points(nintervals+1))
-       CALL get_simpsons_weights(0.0_dp, theta_max, nintervals, weights)
-       CALL get_simpsons_points(0.0_dp, theta_max, nintervals, points)
-
-       res = 0.0_dp
-       DO n=1,nintervals+1
-          theta = points(n)
-
-          ! The minus in the last exponential forces the waves to propagate in -z direction. !!! N.B. Changed back !!!
-
-          common = EXP(-(f**2)*(SIN(theta)**2)/(w0**2))*SQRT(COS(theta))*EXP((0,1)*k*z*COS(theta))
-
-          IF(itype==0) THEN  ! I10
-             CALL besselj(besm,0,maxerr,k*r*SIN(theta),j0)
-             integ = common*(SIN(theta)**3)*j0
-          ELSE IF(itype==1) THEN  ! I11
-             CALL besselj(besm,1,maxerr,k*r*SIN(theta),j1)
-             integ = common*(SIN(theta)**2)*(1.0_dp + 3.0_dp*COS(theta))*j1
-          ELSE IF(itype==2) THEN !  I12
-             CALL besselj(besm,1,maxerr,k*r*SIN(theta),j1)
-             integ = common*(SIN(theta)**2)*(1.0_dp - COS(theta))*j1
-          ELSE IF(itype==3) THEN !  I00
-             CALL besselj(besm,0,maxerr,k*r*SIN(theta),j0)
-             integ = common*SIN(theta)*(1.0_dp + COS(theta))*j0
-          ELSE IF(itype==4) THEN !  I01
-             CALL besselj(besm,1,maxerr,k*r*SIN(theta),j1)
-             integ = common*(SIN(theta)**2)*j1
-          ELSE IF(itype==5) THEN !  I02
-             CALL besselj(besm,2,maxerr,k*r*SIN(theta),j2)
-             integ = common*SIN(theta)*(1.0_dp - COS(theta))*j2
-          ELSE IF(itype==6) THEN !  I13
-             CALL besselj(besm,2,maxerr,k*r*SIN(theta),j2)
-             integ = common*SQRT(CMPLX(COS(theta)))*(SIN(THETA)**3)*j2
-          ELSE IF(itype==7) THEN !  I14
-             CALL besselj(besm,3,maxerr,k*r*SIN(theta),j3)
-             integ = common*SQRT(CMPLX(COS(theta)))*(SIN(THETA)**2)*(1.0_dp-COS(theta))*j3
-          ELSE IF(itype==8) THEN  ! d/(d\rho)(I11)
-             integ = common*(SIN(theta)**2)*(1.0_dp + 3.0_dp*COS(theta))*besselj1d(k*SIN(theta),r)
-          ELSE IF(itype==9) THEN !  d/(d\rho)(I12)
-             integ = common*(SIN(theta)**2)*(1.0_dp - COS(theta))*besselj1d(k*SIN(theta),r)
-          ELSE IF(itype==10) THEN  ! d^2/(d\rho^2)(I11)
-             integ = common*(SIN(theta)**2)*(1.0_dp + 3.0_dp*COS(theta))*besselj1dd(k*SIN(theta),r)
-          ELSE IF(itype==11) THEN !  d^2/(d\rho^2)(I12)
-             integ = common*(SIN(theta)**2)*(1.0_dp - COS(theta))*besselj1dd(k*SIN(theta),r)
-          ELSE IF(itype==12) THEN !  d/(d\rho)(I14)
-             integ = common*SQRT(CMPLX(COS(theta)))*(SIN(THETA)**2)*(1.0_dp-COS(theta))*besselj3d(k*SIN(theta),r)
-          ELSE IF(itype==13) THEN !  d^2/(d\rho^2)(I14)
-             integ = common*SQRT(CMPLX(COS(theta)))*(SIN(THETA)**2)*(1.0_dp-COS(theta))*besselj3dd(k*SIN(theta),r)
-          END IF
-
-          res = res + weights(n)*integ
-       END DO
-
-       err = ABS(prev-res)/ABS(res)
-       prev = res
-
-       nintervals = nintervals*2
-
-       DEALLOCATE(weights, points)
-    END DO
-
-    IF(nintervals>=maxinterv .AND. err>maxerr) THEN
-       WRITE(*,*) 'Could not attain error bounds for radfocus integral!'
-       WRITE(*,*) 'Attained error was ', err
-    END IF
-  END FUNCTION focus_int
-
   FUNCTION compute_focus_maximum(f, na, w0, ri, omega, focustype) RESULT(emax)
     REAL (KIND=dp), INTENT(IN) :: f, na, w0, omega
     COMPLEX (KIND=dp), INTENT(IN) :: ri
@@ -444,8 +378,12 @@ CONTAINS
 
     COMPLEX (KIND=dp), DIMENSION(3), INTENT(OUT) :: e, h
 
-    REAL (KIND=dp) :: r, z, phi, theta_max, k
+    REAL (KIND=dp) :: r, z, phi, theta_max, k, maxerr
     COMPLEX (KIND=dp) :: I10, I11, I12, I00, I01, I02, I13, I14, prefix
+    INTEGER :: maxDepth
+
+    maxerr = 1D-6
+    maxDepth = 10
 
     r = SQRT(pos(1)**2 + pos(2)**2)
     phi = ATAN2(pos(2), pos(1))
@@ -458,61 +396,166 @@ CONTAINS
     IF(focustype==focustype_radial) THEN
        prefix = (1.0_dp/SQRT(ri))*(0,1)*k*(f**2)*EXP(-(0,1)*k*f)/(2*w0)
 
-       I10 = focus_int(r,z,k,f,w0,theta_max,0)
-       I11 = focus_int(r,z,k,f,w0,theta_max,1)
-       I12 = focus_int(r,z,k,f,w0,theta_max,2)
+       I10 = asqz(integI10, 0.0_dp, theta_max, maxerr, maxDepth)
+       I11 = asqz(integI11, 0.0_dp, theta_max, maxerr, maxDepth)
+       I12 = asqz(integI12, 0.0_dp, theta_max, maxerr, maxDepth)
+
+       !I10 = focus_int(r,z,k,f,w0,theta_max,0)
+       !I11 = focus_int(r,z,k,f,w0,theta_max,1)
+       !I12 = focus_int(r,z,k,f,w0,theta_max,2)
 
        e = prefix*(/(0,1)*(I11 - I12)*COS(phi), (0,1)*(I11 - I12)*SIN(phi), -4.0_dp*I10/)
-       h = ri*prefix/eta0*(/-(0,1)*(I11 + 3.0_dp*I12)*SIN(phi), (0,1)*(I11 + 3.0_dp*I12)*COS(phi), (0.0_dp,0.0_dp)/)
+       h = ri*prefix/eta0*(/-(0,1)*(I11 + 3.0_dp*I12)*&
+            SIN(phi), (0,1)*(I11 + 3.0_dp*I12)*COS(phi), (0.0_dp,0.0_dp)/)
     ELSE IF(focustype==focustype_x) THEN
-       !  prefix = (0,1)*k*f*EXP(-(0,1)*k*f)/2.0_dp
-       ! Changed 9.6.2011
        prefix = (1.0_dp/SQRT(ri))*(0,1)*k*f*EXP(-(0,1)*k*f)/2.0_dp
 
-       I00 = focus_int(r,z,k,f,w0,theta_max,3)
-       I01 = focus_int(r,z,k,f,w0,theta_max,4)
-       I02 = focus_int(r,z,k,f,w0,theta_max,5)
-
-       e = prefix*(/I00 + I02*COS(2.0_dp*phi), I02*SIN(2.0_dp*phi), -2.0_dp*(0,1)*I01*COS(phi)/)
-       h = ri*prefix/eta0*(/I02*SIN(2.0_dp*phi), I00 - I02*COS(2.0_dp*phi), -2.0_dp*(0,1)*I01*SIN(phi)/)
-    ELSE IF(focustype==focustype_y) THEN
-       ! Changed 21.3.2012
-       WRITE(*,*) 'Invalid evaluation of focused y-polarized beam.'
-       STOP
-
-       !  prefix = (0,1)*k*f*EXP(-(0,1)*k*f)/2.0_dp
-       ! Changed 9.6.2011
-       !prefix = (1.0_dp/SQRT(ri))*(0,1)*k*f*EXP(-(0,1)*k*f)/2.0_dp
+       I00 = asqz(integI00, 0.0_dp, theta_max, maxerr, maxDepth)
+       I01 = asqz(integI01, 0.0_dp, theta_max, maxerr, maxDepth)
+       I02 = asqz(integI02, 0.0_dp, theta_max, maxerr, maxDepth)
 
        !I00 = focus_int(r,z,k,f,w0,theta_max,3)
        !I01 = focus_int(r,z,k,f,w0,theta_max,4)
        !I02 = focus_int(r,z,k,f,w0,theta_max,5)
 
-       !e = prefix*(/-I02*SIN(2.0_dp*phi),I00 - I02*COS(2.0_dp*phi),2.0_dp*(0,1)*I01*SIN(phi)/)
-       !h = ri*prefix/eta0*(/I00 + I02*COS(2.0_dp*phi),-I02*SIN(2.0_dp*phi),2.0_dp*(0,1)*I01*COS(phi)/)
+       e = prefix*(/I00 + I02*COS(2.0_dp*phi), I02*SIN(2.0_dp*phi), -2.0_dp*(0,1)*I01*COS(phi)/)
+       h = ri*prefix/eta0*(/I02*SIN(2.0_dp*phi), I00 - I02*COS(2.0_dp*phi), -2.0_dp*(0,1)*I01*&
+            SIN(phi)/)
+    ELSE IF(focustype==focustype_y) THEN
+       WRITE(*,*) 'Focused y-polarized beam not yet implemented.'
+       STOP
     ELSE IF(focustype==focustype_hg01) THEN
        prefix = (1.0_dp/SQRT(ri))*(0,1)*k*(f**2)*EXP(-(0,1)*k*f)/(2.0_dp*w0)
 
-       I10 = focus_int(r,z,k,f,w0,theta_max,0)
-       I11 = focus_int(r,z,k,f,w0,theta_max,1)
-       I12 = focus_int(r,z,k,f,w0,theta_max,2)
-       I13 = focus_int(r,z,k,f,w0,theta_max,6)
-       I14 = focus_int(r,z,k,f,w0,theta_max,7)
+       I10 = asqz(integI10, 0.0_dp, theta_max, maxerr, maxDepth)
+       I11 = asqz(integI11, 0.0_dp, theta_max, maxerr, maxDepth)
+       I12 = asqz(integI12, 0.0_dp, theta_max, maxerr, maxDepth)
+       I13 = asqz(integI13, 0.0_dp, theta_max, maxerr, maxDepth)
+       I14 = asqz(integI14, 0.0_dp, theta_max, maxerr, maxDepth)
+
+       !I10 = focus_int(r,z,k,f,w0,theta_max,0)
+       !I11 = focus_int(r,z,k,f,w0,theta_max,1)
+       !I12 = focus_int(r,z,k,f,w0,theta_max,2)
+       !I13 = focus_int(r,z,k,f,w0,theta_max,6)
+       !I14 = focus_int(r,z,k,f,w0,theta_max,7)
 
        e = prefix*(/(0,1)*(I11 + 2.0_dp*I12)*SIN(phi) + (0,1)*I14*SIN(3.0_dp*phi),&
             -(0,1)*I12*COS(phi) - (0,1)*I14*COS(3.0_dp*phi), 2.0_dp*I13*SIN(2.0_dp*phi)/)
        h = ri*prefix/eta0*(/-(0,1)*I12*COS(phi) - (0,1)*I14*COS(3.0_dp*phi),&
-            (0,1)*I11*SIN(phi) - (0,1)*I14*SIN(3.0_dp*phi), -2.0_dp*I10 - 2.0_dp*I13*COS(2.0_dp*phi)/)
+            (0,1)*I11*SIN(phi) - (0,1)*I14*SIN(3.0_dp*phi), -2.0_dp*I10 - 2.0_dp*I13*&
+            COS(2.0_dp*phi)/)
     ELSE IF(focustype==focustype_azimut) THEN
        prefix = (1.0_dp/SQRT(ri))*(0,1)*k*(f**2)*EXP(-(0,1)*k*f)/(2*w0)
 
-       I10 = focus_int(r,z,k,f,w0,theta_max,0)
-       I11 = focus_int(r,z,k,f,w0,theta_max,1)
-       I12 = focus_int(r,z,k,f,w0,theta_max,2)
+       I10 = asqz(integI10, 0.0_dp, theta_max, maxerr, maxDepth)
+       I11 = asqz(integI11, 0.0_dp, theta_max, maxerr, maxDepth)
+       I12 = asqz(integI12, 0.0_dp, theta_max, maxerr, maxDepth)
 
-       e = prefix*(/(0,1)*(I11 + 3.0_dp*I12)*SIN(phi), -(0,1)*(I11 + 3.0_dp*I12)*COS(phi), (0.0_dp,0.0_dp)/)
+       !I10 = focus_int(r,z,k,f,w0,theta_max,0)
+       !I11 = focus_int(r,z,k,f,w0,theta_max,1)
+       !I12 = focus_int(r,z,k,f,w0,theta_max,2)
+
+       e = prefix*(/(0,1)*(I11 + 3.0_dp*I12)*SIN(phi), -(0,1)*(I11 + 3.0_dp*I12)*&
+            COS(phi), (0.0_dp,0.0_dp)/)
        h = ri*prefix/eta0*(/(0,1)*(I11 - I12)*COS(phi), (0,1)*(I11 - I12)*SIN(phi), -4.0_dp*I10/)
     END IF
+
+    ! Define integrands of variable theta.
+  CONTAINS
+    FUNCTION integCommon(theta) RESULT(common)
+      REAL (KIND=dp), INTENT(IN) :: theta
+      COMPLEX (KIND=dp) :: common
+
+      common = EXP(-(f**2)*(SIN(theta)**2)/(w0**2))*SQRT(COS(theta))*EXP((0,1)*k*z*COS(theta))
+    END FUNCTION integCommon
+
+    FUNCTION integI10(theta) RESULT(integ)
+      REAL (KIND=dp), INTENT(IN) :: theta
+      COMPLEX (KIND=dp) :: common, integ
+      INTEGER :: besm
+      REAL (KIND=dp) :: j0
+
+      common = integCommon(theta)
+      CALL besselj(besm,0,maxerr,k*r*SIN(theta),j0)
+      integ = common*(SIN(theta)**3)*j0
+    END FUNCTION integI10
+
+    FUNCTION integI11(theta) RESULT(integ)
+      REAL (KIND=dp), INTENT(IN) :: theta
+      COMPLEX (KIND=dp) :: common, integ
+      INTEGER :: besm
+      REAL (KIND=dp) :: j1
+
+      common = integCommon(theta)
+      CALL besselj(besm,1,maxerr,k*r*SIN(theta),j1)
+      integ = common*(SIN(theta)**2)*(1.0_dp + 3.0_dp*COS(theta))*j1
+    END FUNCTION integI11
+
+    FUNCTION integI12(theta) RESULT(integ)
+      REAL (KIND=dp), INTENT(IN) :: theta
+      COMPLEX (KIND=dp) :: common, integ
+      INTEGER :: besm
+      REAL (KIND=dp) :: j1
+
+      common = integCommon(theta)
+      CALL besselj(besm,1,maxerr,k*r*SIN(theta),j1)
+      integ = common*(SIN(theta)**2)*(1.0_dp - COS(theta))*j1
+    END FUNCTION integI12
+
+    FUNCTION integI00(theta) RESULT(integ)
+      REAL (KIND=dp), INTENT(IN) :: theta
+      COMPLEX (KIND=dp) :: common, integ
+      INTEGER :: besm
+      REAL (KIND=dp) :: j0
+
+      common = integCommon(theta)
+      CALL besselj(besm,0,maxerr,k*r*SIN(theta),j0)
+      integ = common*SIN(theta)*(1.0_dp + COS(theta))*j0
+    END FUNCTION integI00
+
+    FUNCTION integI01(theta) RESULT(integ)
+      REAL (KIND=dp), INTENT(IN) :: theta
+      COMPLEX (KIND=dp) :: common, integ
+      INTEGER :: besm
+      REAL (KIND=dp) :: j1
+
+      common = integCommon(theta)
+      CALL besselj(besm,1,maxerr,k*r*SIN(theta),j1)
+      integ = common*(SIN(theta)**2)*j1
+    END FUNCTION integI01
+
+    FUNCTION integI02(theta) RESULT(integ)
+      REAL (KIND=dp), INTENT(IN) :: theta
+      COMPLEX (KIND=dp) :: common, integ
+      INTEGER :: besm
+      REAL (KIND=dp) :: j2
+
+      common = integCommon(theta)
+      CALL besselj(besm,2,maxerr,k*r*SIN(theta),j2)
+      integ = common*SIN(theta)*(1.0_dp - COS(theta))*j2
+    END FUNCTION integI02
+
+    FUNCTION integI13(theta) RESULT(integ)
+      REAL (KIND=dp), INTENT(IN) :: theta
+      COMPLEX (KIND=dp) :: common, integ
+      INTEGER :: besm
+      REAL (KIND=dp) :: j2
+
+      common = integCommon(theta)
+      CALL besselj(besm,2,maxerr,k*r*SIN(theta),j2)
+      integ = common*SQRT(CMPLX(COS(theta)))*(SIN(THETA)**3)*j2
+    END FUNCTION integI13
+
+    FUNCTION integI14(theta) RESULT(integ)
+      REAL (KIND=dp), INTENT(IN) :: theta
+      COMPLEX (KIND=dp) :: common, integ
+      INTEGER :: besm
+      REAL (KIND=dp) :: j3
+
+      common = integCommon(theta)
+      CALL besselj(besm,3,maxerr,k*r*SIN(theta),j3)
+      integ = common*SQRT(CMPLX(COS(theta)))*(SIN(THETA)**2)*(1.0_dp-COS(theta))*j3
+    END FUNCTION integI14
   END SUBROUTINE compute_focus_denorm
 
   SUBROUTINE test_focus(focustype)
@@ -617,44 +660,53 @@ CONTAINS
     y = (a**2)*j1 - 2.0_dp*a/x*j2 - 3.0_dp*a/x*j2 + 9.0_dp/(x**2)*j3
   END FUNCTION besselj3dd
 
-  FUNCTION beam_max_pt(k, f, w0, theta_max, focustype) RESULT(rho)
+  FUNCTION beam_max_pt(k, f, w0, theta_max, focustype) RESULT(r)
     INTEGER, INTENT(IN) :: focustype
     REAL (KIND=dp), INTENT(IN) :: k, f, w0, theta_max
 
-    REAL (KIND=dp) :: rho, fd, fdd, err, rho_prev
-    INTEGER :: n
+    REAL (KIND=dp) :: r, z, fd, fdd, err, r_prev, maxerr
+    INTEGER :: n, maxDepth
     COMPLEX (KIND=dp) :: I11, I12, I11d, I12d, I11dd, I12dd, I14, I14d, I14dd, c, cd, cdd
+
+    maxerr = 1D-6
+    maxDepth = 10
+
+    z = 0.0_dp
 
     ! Initial guess.
     IF(focustype==focustype_azimut) THEN
-     !  rho = 3.8317_dp/(k*SIN(theta_max))
-       rho = 0.5_dp*3.8317_dp/(k*SIN(theta_max))
+       r = 0.5_dp*3.8317_dp/(k*SIN(theta_max))
     ELSE IF(focustype==focustype_hg01) THEN
-       rho = 0.5_dp*3.8317_dp/(k*SIN(theta_max))
+       r = 0.5_dp*3.8317_dp/(k*SIN(theta_max))
     END IF
 
     DO n=1,20
+       I11 = asqz(integI11, 0.0_dp, theta_max, maxerr, maxDepth)
+       I12 = asqz(integI12, 0.0_dp, theta_max, maxerr, maxDepth)
+       I11d = asqz(integDrhoI11, 0.0_dp, theta_max, maxerr, maxDepth)
+       I12d = asqz(integDrhoI12, 0.0_dp, theta_max, maxerr, maxDepth)
+       I11dd = asqz(integDDrhoI11, 0.0_dp, theta_max, maxerr, maxDepth)
+       I12dd = asqz(integDDrhoI12, 0.0_dp, theta_max, maxerr, maxDepth)
+
        IF(focustype==focustype_azimut) THEN
-          I11 = focus_int(rho,0.0_dp,k,f,w0,theta_max,1)
-          I12 = focus_int(rho,0.0_dp,k,f,w0,theta_max,2)
-          I11d = focus_int(rho,0.0_dp,k,f,w0,theta_max,8)
-          I12d = focus_int(rho,0.0_dp,k,f,w0,theta_max,9)
-          I11dd = focus_int(rho,0.0_dp,k,f,w0,theta_max,10)
-          I12dd = focus_int(rho,0.0_dp,k,f,w0,theta_max,11)
+          !I11 = focus_int(rho,0.0_dp,k,f,w0,theta_max,1)
+          !I12 = focus_int(rho,0.0_dp,k,f,w0,theta_max,2)
+          !I11d = focus_int(rho,0.0_dp,k,f,w0,theta_max,8)
+          !I12d = focus_int(rho,0.0_dp,k,f,w0,theta_max,9)
+          !I11dd = focus_int(rho,0.0_dp,k,f,w0,theta_max,10)
+          !I12dd = focus_int(rho,0.0_dp,k,f,w0,theta_max,11)
 
           fd = REAL((I11d + 3*I12d)*CONJG(I11 + 3*I12) + (I11 + 3*I12)*CONJG(I11d + 3*I12d))
           fdd = REAL((I11dd + 3*I12dd)*CONJG(I11 + 3*I12) + (I11d + 3*I12d)*CONJG(I11d + 3*I12d) +&
                (I11d + 3*I12d)*CONJG(I11d + 3*I12d) + (I11 + 3*I12)*CONJG(I11dd + 3*I12dd))
        ELSE IF(focustype==focustype_hg01) THEN
-          I11 = focus_int(rho,0.0_dp,k,f,w0,theta_max,1)
-          I12 = focus_int(rho,0.0_dp,k,f,w0,theta_max,2)
-          I11d = focus_int(rho,0.0_dp,k,f,w0,theta_max,8)
-          I12d = focus_int(rho,0.0_dp,k,f,w0,theta_max,9)
-          I11dd = focus_int(rho,0.0_dp,k,f,w0,theta_max,10)
-          I12dd = focus_int(rho,0.0_dp,k,f,w0,theta_max,11)
-          I14 = focus_int(rho,0.0_dp,k,f,w0,theta_max,7)
-          I14d = focus_int(rho,0.0_dp,k,f,w0,theta_max,12)
-          I14dd = focus_int(rho,0.0_dp,k,f,w0,theta_max,13)
+          I14 = asqz(integI14, 0.0_dp, theta_max, maxerr, maxDepth)
+          I14d = asqz(integDrhoI14, 0.0_dp, theta_max, maxerr, maxDepth)
+          I14dd = asqz(integDDrhoI14, 0.0_dp, theta_max, maxerr, maxDepth)
+
+          !I14 = focus_int(rho,0.0_dp,k,f,w0,theta_max,7)
+          !I14d = focus_int(rho,0.0_dp,k,f,w0,theta_max,12)
+          !I14dd = focus_int(rho,0.0_dp,k,f,w0,theta_max,13)
 
           c = I11 + 2.0_dp*I12 - I14
           cd = I11d + 2.0_dp*I12d - I14d
@@ -663,10 +715,10 @@ CONTAINS
           fdd = REAL(cdd*CONJG(c) + 2.0_dp*cd*CONJG(cd) + c*CONJG(cdd))
        END IF
 
-       rho_prev = rho
-       rho = rho - fd/fdd
+       r_prev = r
+       r = r - fd/fdd
 
-       err = ABS(rho_prev - rho)
+       err = ABS(r_prev - r)
        IF((err < 1e-4) .AND. n>4) THEN
           RETURN
        END IF
@@ -675,6 +727,106 @@ CONTAINS
 
     WRITE(*,*) 'Could not obtain error bounds for source normalization!'
     WRITE(*,*) 'Obtained error was ', err
+
+  CONTAINS
+    FUNCTION integCommon(theta) RESULT(common)
+      REAL (KIND=dp), INTENT(IN) :: theta
+      COMPLEX (KIND=dp) :: common
+
+      common = EXP(-(f**2)*(SIN(theta)**2)/(w0**2))*SQRT(COS(theta))*EXP((0,1)*k*z*COS(theta))
+    END FUNCTION integCommon
+
+    FUNCTION integI11(theta) RESULT(integ)
+      REAL (KIND=dp), INTENT(IN) :: theta
+      COMPLEX (KIND=dp) :: common, integ
+      INTEGER :: besm
+      REAL (KIND=dp) :: j1
+
+      common = integCommon(theta)
+      CALL besselj(besm,1,maxerr,k*r*SIN(theta),j1)
+      integ = common*(SIN(theta)**2)*(1.0_dp + 3.0_dp*COS(theta))*j1
+    END FUNCTION integI11
+
+    FUNCTION integI12(theta) RESULT(integ)
+      REAL (KIND=dp), INTENT(IN) :: theta
+      COMPLEX (KIND=dp) :: common, integ
+      INTEGER :: besm
+      REAL (KIND=dp) :: j1
+
+      common = integCommon(theta)
+      CALL besselj(besm,1,maxerr,k*r*SIN(theta),j1)
+      integ = common*(SIN(theta)**2)*(1.0_dp - COS(theta))*j1
+    END FUNCTION integI12
+
+    FUNCTION integI14(theta) RESULT(integ)
+      REAL (KIND=dp), INTENT(IN) :: theta
+      COMPLEX (KIND=dp) :: common, integ
+      INTEGER :: besm
+      REAL (KIND=dp) :: j3
+
+      common = integCommon(theta)
+      CALL besselj(besm,3,maxerr,k*r*SIN(theta),j3)
+      integ = common*SQRT(CMPLX(COS(theta)))*(SIN(THETA)**2)*(1.0_dp-COS(theta))*j3
+    END FUNCTION integI14
+
+    FUNCTION integDrhoI11(theta) RESULT(integ)
+      REAL (KIND=dp), INTENT(IN) :: theta
+      COMPLEX (KIND=dp) :: common, integ
+      INTEGER :: besm
+
+      common = integCommon(theta)
+      integ = common*(SIN(theta)**2)*(1.0_dp + 3.0_dp*COS(theta))*besselj1d(k*SIN(theta),r)
+    END FUNCTION integDrhoI11
+
+    FUNCTION integDrhoI12(theta) RESULT(integ)
+      REAL (KIND=dp), INTENT(IN) :: theta
+      COMPLEX (KIND=dp) :: common, integ
+      INTEGER :: besm
+
+      common = integCommon(theta)
+      integ = common*(SIN(theta)**2)*(1.0_dp - COS(theta))*besselj1d(k*SIN(theta),r)
+    END FUNCTION integDrhoI12
+
+    FUNCTION integDDrhoI11(theta) RESULT(integ)
+      REAL (KIND=dp), INTENT(IN) :: theta
+      COMPLEX (KIND=dp) :: common, integ
+      INTEGER :: besm
+
+      common = integCommon(theta)
+      integ = common*(SIN(theta)**2)*(1.0_dp + 3.0_dp*COS(theta))*besselj1dd(k*SIN(theta),r)
+    END FUNCTION integDDrhoI11
+
+    FUNCTION integDDrhoI12(theta) RESULT(integ)
+      REAL (KIND=dp), INTENT(IN) :: theta
+      COMPLEX (KIND=dp) :: common, integ
+      INTEGER :: besm
+
+      common = integCommon(theta)
+      integ = common*(SIN(theta)**2)*(1.0_dp - COS(theta))*besselj1dd(k*SIN(theta),r)
+    END FUNCTION integDDrhoI12
+
+    FUNCTION integDrhoI14(theta) RESULT(integ)
+      REAL (KIND=dp), INTENT(IN) :: theta
+      COMPLEX (KIND=dp) :: common, integ
+      INTEGER :: besm
+      COMPLEX (KIND=dp) :: jd
+
+      common = integCommon(theta)
+      jd = besselj3d(k*SIN(theta),r)
+      integ = common*SQRT(CMPLX(COS(theta)))*(SIN(THETA)**2)*(1.0_dp-COS(theta))*jd
+    END FUNCTION integDrhoI14
+
+    FUNCTION integDDrhoI14(theta) RESULT(integ)
+      REAL (KIND=dp), INTENT(IN) :: theta
+      COMPLEX (KIND=dp) :: common, integ
+      INTEGER :: besm
+      COMPLEX (KIND=dp) :: jd
+
+      common = integCommon(theta)
+      jd = besselj3dd(k*SIN(theta),r)
+      integ = common*SQRT(CMPLX(COS(theta)))*(SIN(THETA)**2)*(1.0_dp-COS(theta))*jd
+    END FUNCTION integDDrhoI14
+
   END FUNCTION beam_max_pt
 
   SUBROUTINE print_source_info(src)

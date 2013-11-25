@@ -283,11 +283,11 @@ CONTAINS
 
           pt = r0 + xaxis*ptx(n) + yaxis*pty(m)
           
-          CALL scat_fields(b%domains(dindex)%mesh, b%ga, b%sols(wlindex)%x, b%mesh%nedges,&
+          CALL scat_fields(b%domains(dindex)%mesh, b%ga, b%sols(wlindex)%x(:,:,1), b%mesh%nedges,&
                omega, ri, prd, pt, e, h)
 
           IF(dindex==1) THEN
-             CALL src_fields(b%src, omega, ri, pt, einc, hinc)
+             CALL src_fields(b%src(1), omega, ri, pt, einc, hinc)
 
              e = e + einc
              h = h + hinc
