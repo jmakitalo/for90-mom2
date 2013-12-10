@@ -42,11 +42,15 @@ MODULE source
      ! Focused beam excitation parameters.
      REAL (KIND=dp) :: focal, waist, napr
 
+     ! Normalize beam fields to maximum at focal plane?
+     LOGICAL :: nfocus
+
      ! Excitation source position for, e.g., beams and a dipole.
      REAL (KIND=dp), DIMENSION(3) :: pos
 
      ! Dipole moment of a dipole source.
      COMPLEX (KIND=dp), DIMENSION(3) :: dmom
+
   END type srcdata
 
 CONTAINS
@@ -225,6 +229,8 @@ CONTAINS
     COMPLEX (KIND=dp), DIMENSION(3) :: ef, hf
     REAL (KIND=dp), DIMENSION(3) :: pt
     INTEGER :: nr, na, focustype
+    COMPLEX (KIND=dp) :: gae
+    REAL (KIND=dp) :: detj
 
     einc(:,:) = 0.0_dp
     hinc(:,:) = 0.0_dp
@@ -241,28 +247,32 @@ CONTAINS
        focustype = focustype_azimut
     END IF
 
-    ! Loop through group representations.
-    DO nr=1,SIZE(ga)
+    ! Loop through group actions.
+    DO na=1,SIZE(ga)
+       
+       ! Evaluate the source at p_g^-1(ptin).
+       IF(src%type==src_pw) THEN
+          pt = MATMUL(TRANSPOSE(ga(na)%j), ptin)
+          
+          CALL pw_fields(src%theta, src%phi, src%psi, omega, ri, pt, ef, hf)
+       ELSE IF(src%type==src_focus_rad .OR. src%type==src_focus_azim .OR.&
+            src%type==src_focus_x .OR. src%type==src_focus_y .OR.&
+            src%type==src_focus_hg01) THEN
+          pt = MATMUL(TRANSPOSE(ga(na)%j), ptin) - src%pos
+          
+          CALL compute_focus(src%focal, src%napr, src%waist, ri, omega, pt,&
+               ef, hf, focustype, src%nfocus)
+       END IF
 
-       ! Loop through group actions.
-       DO na=1,SIZE(ga)
+       ! Loop through group representations.
+       DO nr=1,SIZE(ga)
 
-          ! Evaluate the source at p_g^-1(ptin).
-          IF(src%type==src_pw) THEN
-             pt = MATMUL(TRANSPOSE(ga(na)%j), ptin)
-
-             CALL pw_fields(src%theta, src%phi, src%psi, omega, ri, pt, ef, hf)
-          ELSE IF(src%type==src_focus_rad .OR. src%type==src_focus_azim .OR.&
-               src%type==src_focus_x .OR. src%type==src_focus_y .OR.&
-               src%type==src_focus_hg01) THEN
-             pt = MATMUL(TRANSPOSE(ga(na)%j), ptin - src%pos)
-
-             CALL compute_focus(src%focal, src%napr, src%waist, ri, omega, pt, ef, hf, focustype)
-          END IF
+          detj = ga(na)%detj
+          gae = ga(na)%ef(nr)
 
           ! Compute the projections of the fields in the group representations.
-          einc(:,nr) = einc(:,nr) + MATMUL(ga(na)%j, ef)*CONJG(ga(na)%ef(nr))
-          hinc(:,nr) = hinc(:,nr) + MATMUL(ga(na)%j, hf)*CONJG(ga(na)%ef(nr)*ga(na)%detj)
+          einc(:,nr) = einc(:,nr) + MATMUL(ga(na)%j, ef)*gae
+          hinc(:,nr) = hinc(:,nr) + MATMUL(ga(na)%j, hf)*gae*detj
        END DO
     END DO
 
@@ -303,7 +313,7 @@ CONTAINS
          src%type==src_focus_x .OR. src%type==src_focus_y .OR.&
          src%type==src_focus_hg01) THEN
        CALL compute_focus(src%focal, src%napr, src%waist, ri, omega, pt - src%pos,&
-            einc, hinc, focustype)
+            einc, hinc, focustype, src%nfocus)
     END IF
 
   END SUBROUTINE src_fields
@@ -318,14 +328,14 @@ CONTAINS
 
     IF(focustype==focustype_hg01) THEN
        pm = beam_max_pt(omega/c0, f, w0, ASIN(na/REAL(ri,KIND=dp)), focustype)
-       CALL compute_focus_denorm(f, na, w0, ri, omega, (/0.0_dp,pm,0.0_dp/), emax, hmax, focustype)
+       CALL compute_focus_NH(f, na, w0, ri, omega, (/0.0_dp,pm,0.0_dp/), emax, hmax, focustype)
     ELSE IF(focustype==focustype_azimut) THEN
        pm = beam_max_pt(omega/c0, f, w0, ASIN(na/REAL(ri,KIND=dp)), focustype)
-       CALL compute_focus_denorm(f, na, w0, ri, omega, (/pm,0.0_dp,0.0_dp/), emax, hmax, focustype)
+       CALL compute_focus_NH(f, na, w0, ri, omega, (/pm,0.0_dp,0.0_dp/), emax, hmax, focustype)
     ELSE IF(focustype==focustype_y) THEN
-       CALL compute_focus_denorm(f, na, w0, ri, omega, (/0.0_dp,0.0_dp,0.0_dp/), emax, hmax, focustype_x)
+       CALL compute_focus_NH(f, na, w0, ri, omega, (/0.0_dp,0.0_dp,0.0_dp/), emax, hmax, focustype_x)
     ELSE
-       CALL compute_focus_denorm(f, na, w0, ri, omega, (/0.0_dp,0.0_dp,0.0_dp/), emax, hmax, focustype)
+       CALL compute_focus_NH(f, na, w0, ri, omega, (/0.0_dp,0.0_dp,0.0_dp/), emax, hmax, focustype)
     END IF
   END FUNCTION compute_focus_maximum
 
@@ -334,11 +344,12 @@ CONTAINS
   ! We wish the beam to propagate in the (-z)-direction in out cartesian coordinate
   ! system (x,y,z). For this reason we apply a contravariant coordinate transformation for
   ! the results obtained in the frame (x',y',z').
-  SUBROUTINE compute_focus(f, na, w0, ri, omega, posLocal, e, h, focustype)
+  SUBROUTINE compute_focus(f, na, w0, ri, omega, posLocal, e, h, focustype, nfocus)
     REAL (KIND=dp), INTENT(IN) :: f, na, w0, omega
     COMPLEX (KIND=dp), INTENT(IN) :: ri
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: posLocal
     INTEGER, INTENT(IN) :: focustype
+    LOGICAL, INTENT(IN) :: nfocus
 
     COMPLEX (KIND=dp), DIMENSION(3), INTENT(OUT) :: e, h
     COMPLEX (KIND=dp), DIMENSION(3) :: e0, h0, emax, hmax
@@ -349,18 +360,21 @@ CONTAINS
     pos = (/posLocal(1), -posLocal(2), -posLocal(3)/)
 
     IF(focustype==focustype_y) THEN
-       CALL compute_focus_denorm(f, na, w0, ri, omega, (/pos(2), -pos(1), pos(3)/), e, h, focustype_x)
+       CALL compute_focus_NH(f, na, w0, ri, omega, (/pos(2), -pos(1), pos(3)/), e, h, focustype_x)
        e = (/-e(2), e(1), e(3)/)
        h = (/-h(2), h(1), h(3)/)
     ELSE
-       CALL compute_focus_denorm(f, na, w0, ri, omega, pos, e, h, focustype)
+       CALL compute_focus_NH(f, na, w0, ri, omega, pos, e, h, focustype)
     END IF
 
-    emax = compute_focus_maximum(f, na, w0, ri, omega, focustype)
-    scale = 1.0_dp/normc(emax)
-
-    e = e*scale
-    h = h*scale
+    ! Normalize fields to maximum value at focal plane?
+    IF(nfocus) THEN
+       emax = compute_focus_maximum(f, na, w0, ri, omega, focustype)
+       scale = 1.0_dp/normc(emax)
+       
+       e = e*scale
+       h = h*scale
+    END IF
 
     ! The obtained (e,h) is now in the frame (x',y',z'), so we transform it to (x,y,z).
     ! e and h transform similarly although h is a pseudovector. This is because the rotation
@@ -370,7 +384,10 @@ CONTAINS
   END SUBROUTINE compute_focus
 
   ! Always call the subroutine compute_focus to evaluate the fields.
-  SUBROUTINE compute_focus_denorm(f, na, w0, ri, omega, pos, e, h, focustype)
+  ! Returns fields of a beam propagating along +z direction.
+  ! The fields are normalized to incident plane-wave amplitude E0.
+  ! Based on expressions by Novotny and Hecht.
+  SUBROUTINE compute_focus_NH(f, na, w0, ri, omega, pos, e, h, focustype)
     REAL (KIND=dp), INTENT(IN) :: f, na, w0, omega
     COMPLEX (KIND=dp), INTENT(IN) :: ri
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: pos
@@ -382,7 +399,7 @@ CONTAINS
     COMPLEX (KIND=dp) :: I10, I11, I12, I00, I01, I02, I13, I14, prefix
     INTEGER :: maxDepth
 
-    maxerr = 1D-6
+    maxerr = 1D-4
     maxDepth = 10
 
     r = SQRT(pos(1)**2 + pos(2)**2)
@@ -556,7 +573,7 @@ CONTAINS
       CALL besselj(besm,3,maxerr,k*r*SIN(theta),j3)
       integ = common*SQRT(CMPLX(COS(theta)))*(SIN(THETA)**2)*(1.0_dp-COS(theta))*j3
     END FUNCTION integI14
-  END SUBROUTINE compute_focus_denorm
+  END SUBROUTINE compute_focus_NH
 
   SUBROUTINE test_focus(focustype)
     INTEGER, INTENT(IN) :: focustype
@@ -593,7 +610,7 @@ CONTAINS
           tm = REAL(m-1,KIND=dp)/REAL(npoints-1,KIND=dp)
           pt = (/-width/2+width*tn, 0.0_dp, -height/2+height*tm/)
 
-          CALL compute_focus(f, na, w0, ri, omega, pt, e, h, focustype)
+          CALL compute_focus(f, na, w0, ri, omega, pt, e, h, focustype, .FALSE.)
 
           WRITE(fids(1),'(EN15.3)', ADVANCE='NO') ABS(e(1))
           WRITE(fids(2),'(EN15.3)', ADVANCE='NO') ATAN2(IMAG(e(1)), REAL(e(1)))
@@ -842,26 +859,51 @@ CONTAINS
        WRITE(*,'(A,T16,E9.3)') ' focal length: ', src%focal
        WRITE(*,'(A,T14,E9.3)') ' beam waist: ', src%waist
        WRITE(*,'(A,T22,F6.2)') ' numerical aperture: ', src%napr
+       IF(src%nfocus) THEN
+          WRITE(*,*) 'normalized to maximum at focal plane'
+       ELSE
+          WRITE(*,*) 'normalized to incident plane-wave amplitude'
+       END IF
     ELSE IF(src%type==src_focus_x) THEN
        WRITE(*,*) 'source type: ', 'focus_x'
        WRITE(*,'(A,T16,E9.3)') ' focal length: ', src%focal
        WRITE(*,'(A,T14,E9.3)') ' beam waist: ', src%waist
        WRITE(*,'(A,T22,F6.2)') ' numerical aperture: ', src%napr
+       IF(src%nfocus) THEN
+          WRITE(*,*) 'normalized to maximum at focal plane'
+       ELSE
+          WRITE(*,*) 'normalized to incident plane-wave amplitude'
+       END IF
     ELSE IF(src%type==src_focus_y) THEN
        WRITE(*,*) 'source type: ', 'focus_y'
        WRITE(*,'(A,T16,E9.3)') ' focal length: ', src%focal
        WRITE(*,'(A,T14,E9.3)') ' beam waist: ', src%waist
        WRITE(*,'(A,T22,F6.2)') ' numerical aperture: ', src%napr
+       IF(src%nfocus) THEN
+          WRITE(*,*) 'normalized to maximum at focal plane'
+       ELSE
+          WRITE(*,*) 'normalized to incident plane-wave amplitude'
+       END IF
     ELSE IF(src%type==src_focus_azim) THEN
        WRITE(*,*) 'source type: ', 'focus_azim'
        WRITE(*,'(A,T16,E9.3)') ' focal length: ', src%focal
        WRITE(*,'(A,T14,E9.3)') ' beam waist: ', src%waist
        WRITE(*,'(A,T22,F6.2)') ' numerical aperture: ', src%napr
+       IF(src%nfocus) THEN
+          WRITE(*,*) 'normalized to maximum at focal plane'
+       ELSE
+          WRITE(*,*) 'normalized to incident plane-wave amplitude'
+       END IF
     ELSE IF(src%type==src_focus_hg01) THEN
        WRITE(*,*) 'source type: ', 'focus_hg01'
        WRITE(*,'(A,T16,E9.3)') ' focal length: ', src%focal
        WRITE(*,'(A,T14,E9.3)') ' beam waist: ', src%waist
        WRITE(*,'(A,T22,F6.2)') ' numerical aperture: ', src%napr
+       IF(src%nfocus) THEN
+          WRITE(*,*) 'normalized to maximum at focal plane'
+       ELSE
+          WRITE(*,*) 'normalized to incident plane-wave amplitude'
+       END IF
     ELSE IF(src%type==src_dipole) THEN
        WRITE(*,*) 'source type: ', 'dipole'
     END IF

@@ -110,11 +110,13 @@ CONTAINS
        ! Compute excitation source vectors for each representation.
        ! Excitation is assumed to be in domain 1.
        WRITE(*,*) 'Computing source vectors'
+       CALL timer_start()
 
        ri = b%media(b%domains(1)%medium_index)%prop(n)%ri
        DO l=1,nsrc
           CALL srcvec(b%domains(1)%mesh, b%mesh%nedges, omega, ri, b%ga, b%src(l), b%sols(n)%x(:,:,l))
        END DO
+       WRITE(*,*) sec_to_str(timer_end())
 
        ! Solve the linear system of equations for each representation,
        ! enforcing possible boundary conditions.

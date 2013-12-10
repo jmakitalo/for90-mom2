@@ -56,7 +56,7 @@ CONTAINS
     COMPLEX (KIND=dp), DIMENSION(3), INTENT(INOUT) :: e, h
 
     INTEGER :: n, q, index, ns
-    COMPLEX (KIND=dp) :: c1, c2, k
+    COMPLEX (KIND=dp) :: c1, c2, k, gae
     COMPLEX (KIND=dp), DIMENSION(3,3) :: int1, int2, int3
     COMPLEX (KIND=dp), DIMENSION(nedgestot) :: alpha, beta
 
@@ -83,14 +83,13 @@ CONTAINS
              index = mesh%faces(n)%edge_indices(q)
              index = mesh%edges(index)%parent_index
           
+             gae = ga(ns)%ef(nf)
              
-             e = e + alpha(index)*(ga(ns)%ef(nf)*(ga(ns)%detj**2)*c1*int1(:,q)&
-                  + ga(ns)%ef(nf)*c2*int2(:,q)) +&
-                  ga(ns)%ef(nf)*ga(ns)%detj*beta(index)*int3(:,q)
+             e = e + alpha(index)*gae*(c1*int1(:,q) + c2*int2(:,q)) +&
+                  gae*ga(ns)%detj*beta(index)*int3(:,q)
 
-             h = h + beta(index)*(ga(ns)%ef(nf)*ga(ns)%detj*int1(:,q)/c2&
-                  + ga(ns)%ef(nf)*ga(ns)%detj*int2(:,q)/c1) -&
-                  ga(ns)%ef(nf)*(ga(ns)%detj**2)*alpha(index)*int3(:,q)
+             h = h + beta(index)*gae*ga(ns)%detj*(int1(:,q)/c2 + int2(:,q)/c1) -&
+                  gae*alpha(index)*int3(:,q)
           END DO
        END DO
     END DO
@@ -163,11 +162,11 @@ CONTAINS
 
                 fn = MATMUL(ga(na)%j, crossr(mesh%faces(n)%n, rwg(mesh%faces(n)%cp, n, q, mesh)))
 
-                ht = ht - fn*x(index, nf)*CONJG(gae*detj)
-                hn = hn + rwgDiv(n, q, mesh)*x(nedgestot + index, nf)*CONJG(gae*detj)
+                ht = ht - fn*x(index, nf)*gae*detj
+                hn = hn + rwgDiv(n, q, mesh)*x(nedgestot + index, nf)*gae*detj
                 
-                et = et + fn*x(nedgestot + index, nf)*CONJG(gae)
-                en = en + rwgDiv(n, q, mesh)*x(index, nf)*CONJG(gae)
+                et = et + fn*x(nedgestot + index, nf)*gae
+                en = en + rwgDiv(n, q, mesh)*x(index, nf)*gae
              END DO
           END DO
 

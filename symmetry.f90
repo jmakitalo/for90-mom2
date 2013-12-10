@@ -3,6 +3,11 @@
 ! DESCRIPTION:
 ! Implements the type group_action and routines for
 ! manipulating arrays of this type.
+! These can be used to project a field E into a representation n
+! consisting of complex elements {rho^n_m}:
+! A projection is then E^n(r) = (1/N) sum_m (rho_m^n)^* J_m E(J_m^T r),
+! where J_m is isometric group action and N is order of the group.
+! Instead of rho, we use the notion of field action ef = rho^*.
 MODULE symmetry
   USE linalg
 
@@ -116,9 +121,10 @@ CONTAINS
     phase = EXP((0,1)*angle)
 
     ! Field actions of all representations.
+    ! Field actions are the conjugates of the complex group representations.
     DO k=1,n
        DO l=1,n
-          ga(k)%ef(l) = phase**((k-1)*(l-1))
+          ga(k)%ef(l) = CONJG(phase**((k-1)*(l-1)))
        END DO
     END DO
 

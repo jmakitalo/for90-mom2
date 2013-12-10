@@ -27,6 +27,7 @@ CONTAINS
     REAL (KIND=dp), DIMENSION(3) :: fn, nor
     REAL (KIND=dp) :: c
     REAL (KIND=dp), DIMENSION(3,SIZE(qw)) :: qpn
+    COMPLEX (KIND=dp) :: gae
 
     nweights = SIZE(qw)
 
@@ -55,6 +56,7 @@ CONTAINS
 
              ! Compute the action of O_g to nxH and nxE.
              DO nf=1,SIZE(ga)
+                gae = ga(ns)%ef(nf)
 
                 Et2(:) = 0.0_dp
                 Ht2(:) = 0.0_dp
@@ -63,8 +65,8 @@ CONTAINS
                    index = mesh%faces(n)%edge_indices(p)
                    index = mesh%edges(index)%parent_index
 
-                   Ht2 = Ht2 - x(index, nf)*fn*CONJG(ga(ns)%ef(nf)*ga(ns)%detj)
-                   Et2 = Et2 + x(index + nedgestot, nf)*fn*CONJG(ga(ns)%ef(nf))
+                   Ht2 = Ht2 - x(index, nf)*fn*gae*ga(ns)%detj
+                   Et2 = Et2 + x(index + nedgestot, nf)*fn*gae
                 END DO
 
                 Et = Et + Et2

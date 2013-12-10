@@ -80,7 +80,7 @@ ffields.o: ffields.f90 rwgf.f90 rwgf.o symmetry.f90 symmetry.o dipole.f90 dipole
 cs.o: cs.f90 source.f90 source.o
 	$(COMPILER) -c cs.f90
 
-nlsurf.o: nlsurf.f90 rwgf.f90 rwgf.o symmetry.f90 symmetry.o
+nlsurf.o: nlsurf.f90 rwgf.f90 rwgf.o symmetry.f90 symmetry.o bc.f90 bc.o
 	$(COMPILER) -c nlsurf.f90
 
 dipole.o: dipole.f90 srcint.f90 srcint.o nfields.f90 nfields.o

@@ -52,6 +52,11 @@ CONTAINS
     b%domains(dom_index)%mesh = extract_submesh(b%mesh, ABS(surf_ids))
 
     DO n=1,nsurf
+       IF(surf_ids(n)==0) THEN
+          WRITE(*,*) 'Zero is not a valid surface id!'
+          STOP
+       END IF
+
        IF(surf_ids(n)<0) THEN
           CALL invert_faces(b%domains(dom_index)%mesh, ABS(surf_ids(n)))
        END IF
@@ -355,11 +360,13 @@ CONTAINS
 
     ALLOCATE(b%src(1:(npt*npt)))
 
+    ! Construct sources so that in column major matrix R
+    ! of results R(1,1) corresponds to top left position.
     DO n=1,npt
        DO m=1,npt
           index = (n-1)*npt + m
           b%src(index) = src
-          b%src(index)%pos = (/-d/2+d*REAL(n-1,KIND=dp)/(npt-1), -d/2+d*REAL(m-1,KIND=dp)/(npt-1), sz/)
+          b%src(index)%pos = (/-d/2+d*REAL(n-1,KIND=dp)/(npt-1), d/2-d*REAL(m-1,KIND=dp)/(npt-1), sz/)
        END DO
     END DO
 
@@ -371,7 +378,7 @@ CONTAINS
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
     CHARACTER (LEN=32) :: token
-    CHARACTER (LEN=256) :: solname, src_meshname
+    CHARACTER (LEN=256) :: solname, src_meshname, nfocus
     CHARACTER (LEN=3) :: ext
     INTEGER :: nga, nfrags
 
@@ -388,24 +395,37 @@ CONTAINS
        b%src(1)%psi = b%src(1)%psi*degtorad
     ELSE IF(token=='focus_rad') THEN
        b%src(1)%type = src_focus_rad
-       READ(line,*) token, b%src(1)%focal, b%src(1)%waist, b%src(1)%napr
+       READ(line,*) token, b%src(1)%focal, b%src(1)%waist, b%src(1)%napr, nfocus
     ELSE IF(token=='focus_x') THEN
        b%src(1)%type = src_focus_x
-       READ(line,*) token, b%src(1)%focal, b%src(1)%waist, b%src(1)%napr
+       READ(line,*) token, b%src(1)%focal, b%src(1)%waist, b%src(1)%napr, nfocus
     ELSE IF(token=='focus_y') THEN
        b%src(1)%type = src_focus_y
-       READ(line,*) token, b%src(1)%focal, b%src(1)%waist, b%src(1)%napr
+       READ(line,*) token, b%src(1)%focal, b%src(1)%waist, b%src(1)%napr, nfocus
     ELSE IF(token=='focus_hg01') THEN
        b%src(1)%type = src_focus_hg01
-       READ(line,*) token, b%src(1)%focal, b%src(1)%waist, b%src(1)%napr
+       READ(line,*) token, b%src(1)%focal, b%src(1)%waist, b%src(1)%napr, nfocus
     ELSE IF(token=='focus_azimut') THEN
        b%src(1)%type = src_focus_azim
-       READ(line,*) token, b%src(1)%focal, b%src(1)%waist, b%src(1)%napr
+       READ(line,*) token, b%src(1)%focal, b%src(1)%waist, b%src(1)%napr, nfocus
     ELSE IF(token=='dipole') THEN
        b%src(1)%type = src_dipole
        READ(line,*) token, b%src(1)%pos, b%src(1)%dmom
     ELSE
        WRITE(*,*) 'Invalid source type!'
+    END IF
+
+    IF(b%src(1)%type==src_focus_rad .OR. b%src(1)%type==src_focus_x .OR.&
+         b%src(1)%type==src_focus_y .OR. b%src(1)%type==src_focus_hg01 .OR.&
+         b%src(1)%type==src_focus_azim) THEN
+       IF(nfocus=='true') THEN
+          b%src(1)%nfocus = .TRUE.
+       ELSE IF(nfocus=='false') THEN
+          b%src(1)%nfocus = .FALSE.
+       ELSE
+          WRITE(*,*) 'Unrecognized source argument value!'
+          STOP
+       END IF
     END IF
   END SUBROUTINE read_source
 
@@ -542,6 +562,9 @@ CONTAINS
     END IF
   END SUBROUTINE read_nfms
 
+  ! Computes a 2D image, where pixels correspond to source positions.
+  ! Data may be plotted direcly with MATLAB's scimage, whence x-axis
+  ! points right and y-axis points up.
   SUBROUTINE read_rcs2(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
@@ -554,6 +577,8 @@ CONTAINS
     READ(line,*) wlindex
 
     WRITE(*,*) 'Computing scattered power'
+
+    CALL timer_start()
 
     omega = 2.0_dp*pi*c0/b%sols(wlindex)%wl
     ri = b%media(b%domains(1)%medium_index)%prop(wlindex)%ri
@@ -600,6 +625,8 @@ CONTAINS
        CALL write_data(oname, RESHAPE(scatp,(/npt,npt/)))
 
     END IF
+
+    WRITE(*,*) sec_to_str(timer_end())
 
   END SUBROUTINE read_rcs2
 
@@ -758,6 +785,23 @@ CONTAINS
        CALL write_data(TRIM(b%name) // '-sh.crs', data)
     END IF
   END SUBROUTINE read_crst
+
+  SUBROUTINE test()
+    COMPLEX (KIND=dp) :: res
+
+    CALL asqz2(fun, 0.0_dp, pi, 0.0_dp, 3.0_dp, 1d-6, 10, res)
+
+    WRITE(*,*) REAL(res)
+
+  CONTAINS
+    FUNCTION fun(x,y) RESULT(z)
+      REAL (KIND=dp), INTENT(IN) :: x, y
+      COMPLEX (KIND=dp) :: z
+
+      z = EXP(-y)*(SIN(4*x)**2)
+
+    END FUNCTION fun
+  END SUBROUTINE test
 
   SUBROUTINE msgloop()
     CHARACTER (LEN=256) :: line

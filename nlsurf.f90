@@ -5,6 +5,7 @@
 MODULE nlsurf
   USE rwgf
   USE symmetry
+  USE bc
 
   IMPLICIT NONE
 
@@ -47,9 +48,8 @@ CONTAINS
     e = crossc(CMPLX(mesh%faces(faceind)%n,KIND=dp), ms) + mesh%faces(faceind)%n*en
   END FUNCTION efield
 
-  ! Computes the inverse action on field, i.e., O_g^-1(E) where
-  ! g is group element of index gai and O_g E(r) = E(p_g(r)) where
-  ! p_g is group action on points.
+  ! Computes the inverse action on field, i.e., E(J_g^-1 r) where
+  ! J_g is a group action of index gai.
   FUNCTION efield_invmap(mesh, nedgestot, omega, ri, x, ga, faceind, gai, r) RESULT(e)
     TYPE(mesh_container), INTENT(IN) :: mesh
     REAL (KIND=dp), INTENT(IN) :: omega
@@ -67,7 +67,7 @@ CONTAINS
     DO n=1,SIZE(ga)
        e2 = efield(mesh, nedgestot, omega, ri, x(:,n), faceind, r)
 
-       e = e + ga(gai)%ef(n)*MATMUL(TRANSPOSE(ga(gai)%j), e2)
+       e = e + CONJG(ga(gai)%ef(n))*MATMUL(TRANSPOSE(ga(gai)%j), e2)
     END DO
   END FUNCTION efield_invmap
 
@@ -119,8 +119,7 @@ CONTAINS
     DO n=1,SIZE(ga)
        Pnls2 = Pnls_invmap(mesh, nedgestot, omega, ri, x, ga, faceind, n, nls, r)
 
-       !Pnls = Pnls + CONJG(ga(n)%ef(nf)**2)*MATMUL(ga(n)%j, Pnls2)
-       Pnls = Pnls + CONJG(ga(n)%ef(nf))*MATMUL(ga(n)%j, Pnls2)
+       Pnls = Pnls + ga(n)%ef(nf)*MATMUL(ga(n)%j, Pnls2)
     END DO
 
     Pnls = Pnls/REAL(SIZE(ga),KIND=dp)
@@ -146,9 +145,9 @@ CONTAINS
    
     COMPLEX (KIND=dp), DIMENSION(:), INTENT(INOUT) :: src_coef, src_vec
     COMPLEX (KIND=dp), DIMENSION(mesh%nedges) :: coef
+    COMPLEX (KIND=dp), DIMENSION(mesh%nedges,2) :: tmp
     COMPLEX (KIND=dp), DIMENSION(:,:), ALLOCATABLE :: F
-    INTEGER, DIMENSION(:), ALLOCATABLE :: IPIV
-    INTEGER :: INFO, m, r, q, index, nweights, nbasis, m2, t
+    INTEGER :: INFO, m, r, q, index, nweights, nbasis, m2, t, dim
 
     COMPLEX (KIND=dp) :: int1, int2, int3
     REAL (KIND=dp) :: A, fmDiv
@@ -160,6 +159,8 @@ CONTAINS
     REAL (KIND=dp) :: omegash
     REAL (KIND=dp), DIMENSION(2) :: pts
     LOGICAL :: contour_method
+    INTEGER, DIMENSION(mesh%nedges*2) :: id
+    COMPLEX (KIND=dp), DIMENSION(mesh%nedges*2) :: phase
 
     contour_method = .FALSE.
 
@@ -173,10 +174,6 @@ CONTAINS
     coef(:) = 0.0_dp
     src_vec(:) = 0.0_dp
     src_coef(:) = 0.0_dp
-
-    ! Points for n=2 Gauss-Legendre quadrature.
-    pts(1) = -1.0_dp/SQRT(3.0_dp)
-    pts(2) = -pts(1)
 
     DO m=1,mesh%nfaces
        qp = GLquad_points(m, mesh)
@@ -222,29 +219,40 @@ CONTAINS
 
     src_vec((nbasis+1):(2*nbasis)) = 0.5_dp*(0,1)*omegash*src_vec((nbasis+1):(2*nbasis))
 
-    ALLOCATE(F(nbasis,nbasis), IPIV(nbasis))
+    ALLOCATE(F(nbasis,nbasis))
 
     CALL rwg_moments(mesh, F)
 
-    CALL ZGETRF(nbasis, nbasis, F, nbasis, IPIV, INFO)
-    IF(INFO/=0) THEN
-       WRITE(*,*) 'Matrix factorization failed!'
-       STOP
-    END IF
+    ! Arrange two RHS of a linear system into one array.
+    ! These vectors are symmetrical in the same way as the E-field.
+    tmp(:,1) = coef
+    tmp(:,2) = src_coef((nbasis+1):(2*nbasis))
 
-    CALL ZGETRS('N', nbasis, 1, F, nbasis, IPIV, coef, nbasis, INFO)
-    IF(INFO/=0) THEN
-       WRITE(*,*) 'Solving of system failed!'
-       STOP
-    END IF
+    ! Impose boundary conditions on the system.
+    ! N.B. Bloch conditions for periodic problems are not properly handled.
+    CALL edge_bc(mesh, ga, (1.0_dp,0.0_dp), (1.0_dp,0.0_dp), nf, id, phase)
+    CALL resolve_system_dependencies(F, tmp, id(1:nbasis), phase(1:nbasis))
+    CALL reduce_system(F, tmp, dim, id(1:nbasis))
 
-    CALL ZGETRS('N', nbasis, 1, F, nbasis, IPIV, src_coef((nbasis+1):(2*nbasis)), nbasis, INFO)
-    IF(INFO/=0) THEN
-       WRITE(*,*) 'Solving of system failed!'
-       STOP
-    END IF
+    ! Solve the system.
+    CALL solve_multi_linsys(F(1:dim,1:dim), tmp(1:dim,:))
 
+    ! Expand the solution vectors to size nbasis and place zeros
+    ! where designated by symmetry.
+    CALL expand_solution(dim, id(1:nbasis), phase(1:nbasis), tmp)
+
+    ! Place the solved coefficients back.
+    coef = tmp(:,1)
+    src_coef((nbasis+1):(2*nbasis)) = tmp(:,2)
+
+    ! This contour method was described by C. Forestiere, but is inconvenient
+    ! from the points of view of symmetry.
+    ! The other method is based on expanding nabla_t(P_n) in RWG-basis.
     IF(contour_method) THEN
+       ! Points for n=2 Gauss-Legendre quadrature.
+       pts(1) = -1.0_dp/SQRT(3.0_dp)
+       pts(2) = -pts(1)
+
        DO m=1,mesh%nfaces
           nor = mesh%faces(m)%n
           
@@ -301,13 +309,22 @@ CONTAINS
        END DO       
     END IF
 
-    CALL ZGETRS('N', nbasis, 1, F, nbasis, IPIV, src_coef(1:nbasis), nbasis, INFO)
-    IF(INFO/=0) THEN
-       WRITE(*,*) 'Solving of system failed!'
-       STOP
-    END IF
+    ! Solve another system and use a tmp array to match dimensions for function calls.
+    ! This RHS obeys H-field symmetry.
+    tmp(:,1) = src_coef(1:nbasis)
+    tmp(:,2) = 0.0_dp
 
-    DEALLOCATE(F, IPIV)
+    ! F was reduced by E-field symmetry previously, so need to compute it again.
+    CALL rwg_moments(mesh, F)
+    CALL resolve_system_dependencies(F, tmp, id((nbasis+1):(2*nbasis)),&
+         phase((nbasis+1):(2*nbasis)))
+    CALL reduce_system(F, tmp, dim, id((nbasis+1):(2*nbasis)))
+    CALL solve_linsys(F(1:dim,1:dim), tmp(1:dim,1))
+    CALL expand_solution(dim, id((nbasis+1):(2*nbasis)), phase((nbasis+1):(2*nbasis)), tmp)
+
+    src_coef(1:nbasis) = tmp(:,1)
+
+    DEALLOCATE(F)
   END SUBROUTINE nlsurf_coef
 
 END MODULE nlsurf

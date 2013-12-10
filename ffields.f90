@@ -24,12 +24,13 @@ CONTAINS
 
     INTEGER :: n, q, index, nweights, t
     COMPLEX (KIND=dp) :: k, Nt, Np, Lt, Lp, quad1, quad2, quad3, quad4, phasor, prefix
-    REAL (KIND=dp) :: st, ct, sp, cp, An
+    REAL (KIND=dp) :: st, ct, sp, cp, An, detj
     REAL (KIND=dp), DIMENSION(3,SIZE(qw)) :: qpn
     REAL (KIND=dp), DIMENSION(3) :: rp, jg, uphi, utheta
     COMPLEX (KIND=dp), DIMENSION(3) :: jn, mn, ed, hd
     COMPLEX (KIND=dp), DIMENSION(nedgestot) :: alpha, beta
     INTEGER :: nf, ns
+    COMPLEX (KIND=dp) :: gae
 
     st = SIN(theta)
     ct = COS(theta)
@@ -64,11 +65,16 @@ CONTAINS
                 quad3 = 0.0_dp
                 quad4 = 0.0_dp
 
+                detj = ga(ns)%detj
+                gae = ga(ns)%ef(nf)
+
                 DO t=1,nweights
                    rp = MATMUL(ga(ns)%j, qpn(:,t))
                    jg = MATMUL(ga(ns)%j, rwg(qpn(:,t),n,q,mesh))
-                   jn = jg*alpha(index)*ga(ns)%ef(nf)
-                   mn = jg*beta(index)*ga(ns)%ef(nf)*ga(ns)%detj
+
+                   jn = jg*alpha(index)*gae
+                   mn = jg*beta(index)*gae*detj
+
                    phasor = EXP(-(0,1)*k*(rp(1)*st*cp + rp(2)*st*sp + rp(3)*ct))
                    
                    quad1 = quad1 + qw(t)*(ct*cp*jn(1) + ct*sp*jn(2) - st*jn(3))*phasor
@@ -114,7 +120,7 @@ CONTAINS
 
   ! Radar cross-section integrated over solid angle theta_max
   ! around the z-axis in +z-direction.
-  SUBROUTINE rcs_solangle(mesh, nedgestot, omega, ri, ga, x, theta_max, scatp)
+  SUBROUTINE rcs_solangle_old(mesh, nedgestot, omega, ri, ga, x, theta_max, scatp)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, INTENT(IN) :: nedgestot
     REAL (KIND=dp), INTENT(IN) :: omega
@@ -149,6 +155,38 @@ CONTAINS
           scatp = scatp + qwt(n)*qwp(m)*p*SIN(ptt(n))
        END DO
     END DO
+
+  END SUBROUTINE rcs_solangle_old
+
+  SUBROUTINE rcs_solangle(mesh, nedgestot, omega, ri, ga, x, theta_max, scatp)
+    TYPE(mesh_container), INTENT(IN) :: mesh
+    INTEGER, INTENT(IN) :: nedgestot
+    REAL (KIND=dp), INTENT(IN) :: omega
+    COMPLEX (KIND=dp), INTENT(IN) :: ri
+    TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
+    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: x
+    REAL (KIND=dp), INTENT(IN) :: theta_max
+
+    REAL (KIND=dp), INTENT(OUT) :: scatp
+    INTEGER, PARAMETER :: maxDepth = 10
+    REAL (KIND=dp), PARAMETER :: maxerr = 1D-3
+    COMPLEX (KIND=dp) :: scatpz
+
+    CALL asqz2(integ, 0.0_dp, theta_max, 0.0_dp, 2*PI, maxerr, maxDepth, scatpz)
+
+    scatp = REAL(scatpz)
+
+  CONTAINS
+    FUNCTION integ(theta, phi) RESULT(res)
+      REAL (KIND=dp), INTENT(IN) :: theta, phi
+      COMPLEX (KIND=dp) :: res
+      COMPLEX (KIND=dp) :: et, ep, ht, hp
+      
+      CALL far_fields(mesh, nedgestot, omega, ri, ga, x, 1.0_dp,&
+           theta, phi, et, ep, ht, hp)
+      
+      res = SIN(theta)*(ABS(et)**2 + ABS(ep)**2)
+    END FUNCTION integ
 
   END SUBROUTINE rcs_solangle
 

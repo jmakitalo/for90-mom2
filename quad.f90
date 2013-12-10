@@ -353,11 +353,11 @@ CONTAINS
     points(1:(n+1)) = a + h*(/(i,i=0,n)/)
   END SUBROUTINE get_simpsons_points
 
-  RECURSIVE FUNCTION asqz_aux(f, a, b, eps, s, fa, fb, fc, bottom) RESULT(res)
+  RECURSIVE FUNCTION asqz_aux(f, a, b, eps, s, fa, fb, fc, level, maxDepth) RESULT(res)
     COMPLEX (KIND=dp), EXTERNAL :: f
     REAL (KIND=dp), INTENT(IN) :: a, b, eps
     COMPLEX (KIND=dp), INTENT(IN) :: s, fa, fb, fc
-    INTEGER, INTENT(IN) :: bottom
+    INTEGER, INTENT(IN) :: level, maxDepth
 
     COMPLEX (KIND=dp) :: res, fd, fe, sleft, sright, s2
     REAL (KIND=dp) :: c, h, d, e
@@ -376,11 +376,12 @@ CONTAINS
 
     s2 = sleft + sright
 
-    IF(bottom<=0 .OR. ABS(s2 - s)<=15*eps) THEN
+    !IF(bottom<=0 .OR. (ABS(s2 - s)<=15*eps .AND. bottom<4) ) THEN
+    IF(level>=maxDepth .OR. (ABS(s2 - s)<=15*eps .AND. level>1) ) THEN
        res = s2 + (s2 - s)/15
     ELSE
-       res = asqz_aux(f, a, c, eps/2, sleft, fa, fc, fd, bottom-1) +&
-            asqz_aux(f, c, b, eps/2, sright, fc, fb, fe, bottom-1)
+       res = asqz_aux(f, a, c, eps/2, sleft, fa, fc, fd, level+1, maxDepth) +&
+            asqz_aux(f, c, b, eps/2, sright, fc, fb, fe, level+1, maxDepth)
     END IF
   END FUNCTION asqz_aux
 
@@ -403,6 +404,40 @@ CONTAINS
 
     s = (h/6)*(fa + 4*fc + fb)
 
-    res = asqz_aux(f, a, b, eps, s, fa, fb, fc, maxDepth)
+    res = asqz_aux(f, a, b, eps, s, fa, fb, fc, 0, maxDepth)
   END FUNCTION asqz
+
+  ! Integrates f(x,y) over [x1,x2]x[y1,y2].
+  SUBROUTINE asqz2(f, x1, x2, y1, y2, eps, maxDepth, res)
+    COMPLEX (KIND=dp), EXTERNAL :: f
+    REAL (KIND=dp), INTENT(IN) :: x1, x2, y1, y2, eps
+    INTEGER, INTENT(IN) :: maxDepth
+    COMPLEX (KIND=dp), INTENT(INOUT) :: res
+
+    ! Auxiliary variable to make f(x,y) to appear a
+    ! function of single variable for two nested
+    ! integration routines.
+    REAL (KIND=dp) :: gy
+
+    res = asqz(fnested, y1, y2, eps, maxDepth)
+
+  CONTAINS
+    ! Evaluates f with y fixed to global value gy.
+    FUNCTION fproxy(x) RESULT(z)
+      REAL (KIND=dp), INTENT(IN) :: x
+      COMPLEX (KIND=dp) :: z
+
+      z = f(x,gy)
+    END FUNCTION fproxy
+
+    FUNCTION fnested(y) RESULT(z)
+      REAL (KIND=dp), INTENT(IN) :: y
+      COMPLEX (KIND=dp) :: z
+      
+      gy = y
+
+      z = asqz(fproxy, x1, x2, eps, maxDepth)
+    END FUNCTION fnested
+
+  END SUBROUTINE asqz2
 END MODULE quad

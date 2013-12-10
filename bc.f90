@@ -173,10 +173,8 @@ CONTAINS
     INTEGER, INTENT(OUT) :: dim
     INTEGER, DIMENSION(:), INTENT(IN) :: id
 
-    INTEGER :: n, nbasis
+    INTEGER :: n
     INTEGER, DIMENSION(:), ALLOCATABLE :: ind
-
-    nbasis = SIZE(id)/2
 
     ! The reduced dimension is the number of non-negative coefficients.
     dim = COUNT(id/=-1)
