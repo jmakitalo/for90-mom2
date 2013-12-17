@@ -642,6 +642,7 @@ CONTAINS
     READ(line,*) wlindex, ntheta_rcs, nphi_rcs
 
     WRITE(*,*) 'Computing radar cross-sections'
+    CALL timer_start()
 
     ALLOCATE(rcsdata(1:ntheta_rcs,1:nphi_rcs))
 
@@ -669,6 +670,8 @@ CONTAINS
     END IF
 
     DEALLOCATE(rcsdata)
+
+    WRITE(*,*) sec_to_str(timer_end())
 
   END SUBROUTINE read_rcst
 

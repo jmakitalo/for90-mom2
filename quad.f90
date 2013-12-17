@@ -377,7 +377,7 @@ CONTAINS
     s2 = sleft + sright
 
     !IF(bottom<=0 .OR. (ABS(s2 - s)<=15*eps .AND. bottom<4) ) THEN
-    IF(level>=maxDepth .OR. (ABS(s2 - s)<=15*eps .AND. level>1) ) THEN
+    IF(level>=maxDepth .OR. (ABS(s2 - s)<=15*eps*ABS(s2) .AND. level>1) ) THEN
        res = s2 + (s2 - s)/15
     ELSE
        res = asqz_aux(f, a, c, eps/2, sleft, fa, fc, fd, level+1, maxDepth) +&
