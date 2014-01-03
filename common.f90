@@ -7,13 +7,9 @@ MODULE common
   USE source
   USE greenprd
   USE nlsurf
+  USE nlbulk
 
   IMPLICIT NONE
-
-  TYPE medium_nlb
-     COMPLEX (KIND=dp) :: delta_prime
-     COMPLEX (KIND=dp) :: gamma
-  END type medium_nlb
 
   TYPE medium_prop
      COMPLEX (KIND=dp) :: ri
@@ -32,7 +28,8 @@ MODULE common
   ! Medium types.
   INTEGER, PARAMETER :: mtype_linear = 1,&
        mtype_nls = 2,&
-       mtype_nlb = 3
+       mtype_nlb_nonlocal = 3,&
+       mtype_nlb_dipole = 4
 
   ! Solution data.
   TYPE solution

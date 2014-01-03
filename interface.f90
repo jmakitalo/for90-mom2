@@ -28,8 +28,9 @@ CONTAINS
   SUBROUTINE read_sdom(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
-    INTEGER :: dom_index, nsurf, n
+    INTEGER :: dom_index, nsurf, nvol, n
     INTEGER, DIMENSION(:), ALLOCATABLE :: surf_ids
+    INTEGER, DIMENSION(:), POINTER :: vol_ids
     CHARACTER (LEN=256) :: numstr, oname
 
     IF(ALLOCATED(b%domains)==.FALSE.) THEN
@@ -46,10 +47,21 @@ CONTAINS
 
     ALLOCATE(surf_ids(1:nsurf))
 
-    READ(line,*) dom_index, nsurf, surf_ids(1:nsurf),&
-         b%domains(dom_index)%medium_index, b%domains(dom_index)%gf_index
+    READ(line,*) dom_index, nsurf, surf_ids(1:nsurf), nvol
 
-    b%domains(dom_index)%mesh = extract_submesh(b%mesh, ABS(surf_ids))
+    vol_ids => NULL()
+
+    IF(nvol>0) THEN
+       ALLOCATE(vol_ids(1:nvol))
+       
+       READ(line,*) dom_index, nsurf, surf_ids(1:nsurf), nvol, vol_ids(1:nvol),&
+            b%domains(dom_index)%medium_index, b%domains(dom_index)%gf_index
+    ELSE
+       READ(line,*) dom_index, nsurf, surf_ids(1:nsurf), nvol,&
+            b%domains(dom_index)%medium_index, b%domains(dom_index)%gf_index
+    END IF
+
+    b%domains(dom_index)%mesh = extract_submesh(b%mesh, ABS(surf_ids), vol_ids)
 
     DO n=1,nsurf
        IF(surf_ids(n)==0) THEN
@@ -69,6 +81,10 @@ CONTAINS
     CALL build_mesh(b%domains(dom_index)%mesh, 1.0_dp)
 
     DEALLOCATE(surf_ids)
+
+    IF(ASSOCIATED(vol_ids)) THEN
+       DEALLOCATE(vol_ids)
+    END IF
 
   END SUBROUTINE read_sdom
 
@@ -261,10 +277,10 @@ CONTAINS
           WRITE(*,*) 'Unrecongnized method for retrieveing medium properties!'
           RETURN
        END IF
-    ELSE IF(TRIM(type)=='nlbulk') THEN
+    ELSE IF(TRIM(type)=='nlbulk-nonlocal') THEN
        READ(line,*) mindex, type, method
 
-       b%media(mindex)%type = mtype_nlb
+       b%media(mindex)%type = mtype_nlb_nonlocal
 
        IF(method=='value') THEN
           READ(line,*) mindex, type, method, b%media(mindex)%prop(1)%nlb%delta_prime,&
@@ -273,6 +289,21 @@ CONTAINS
           DO n=1,b%nwl
              b%media(mindex)%prop(n)%nlb%delta_prime = b%media(mindex)%prop(1)%nlb%delta_prime
              b%media(mindex)%prop(n)%nlb%gamma = b%media(mindex)%prop(1)%nlb%gamma
+          END DO
+       ELSE
+          WRITE(*,*) 'Unrecongnized method for retrieveing medium properties!'
+          RETURN
+       END IF
+    ELSE IF(TRIM(type)=='nlbulk-dipole') THEN
+       READ(line,*) mindex, type, method
+
+       b%media(mindex)%type = mtype_nlb_dipole
+
+       IF(method=='value') THEN
+          READ(line,*) mindex, type, method, b%media(mindex)%prop(1)%nlb%chi2zzz
+
+          DO n=1,b%nwl
+             b%media(mindex)%prop(n)%nlb%chi2zzz = b%media(mindex)%prop(1)%nlb%chi2zzz
           END DO
        ELSE
           WRITE(*,*) 'Unrecongnized method for retrieveing medium properties!'

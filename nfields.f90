@@ -15,9 +15,6 @@ MODULE nfields
   END TYPE nfield_plane
 
 CONTAINS
-  ! If multidomain description is used, domain is the domain index referencing
-  ! b%domains. Otherwise domain==1 corresponds to exterior and domain==2 to interior
-  ! domain.
   SUBROUTINE scat_fields(mesh, ga, x, nedgestot, omega, ri, prd, r, e, h)
     TYPE(mesh_container), INTENT(IN) :: mesh
     COMPLEX (KIND=dp), INTENT(IN) :: ri
@@ -29,44 +26,96 @@ CONTAINS
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r
 
     COMPLEX (KIND=dp), DIMENSION(3), INTENT(INOUT) :: e, h
-    COMPLEX (KIND=dp), DIMENSION(3) :: e2, h2
+    COMPLEX (KIND=dp), DIMENSION(3,SIZE(ga)) :: e2, h2
     INTEGER :: nf
 
     e(:) = 0.0_dp
     h(:) = 0.0_dp
 
-    DO nf=1,SIZE(ga)
-       CALL scat_fields_frag(mesh, ga, nf, x(:,nf), nedgestot, omega, ri, prd, r, e, h)
+    CALL scat_fields_frags(mesh, ga, x, nedgestot, omega, ri, prd, r, e2, h2)
 
-       e = e + e2
-       h = h + h2
+    DO nf=1,SIZE(ga)
+       e = e + e2(:,nf)
+       h = h + h2(:,nf)
     END DO
   END SUBROUTINE scat_fields
 
-  SUBROUTINE scat_fields_frag(mesh, ga, nf, x, nedgestot, omega, ri, prd, r, e, h)
+  SUBROUTINE scat_fields_ga(mesh, ga, x, nedgestot, omega, ri, prd, gai, r, e, h)
     TYPE(mesh_container), INTENT(IN) :: mesh
     COMPLEX (KIND=dp), INTENT(IN) :: ri
     REAL (KIND=dp), INTENT(IN) :: omega
+    INTEGER, INTENT(IN) :: nedgestot, gai
     TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
-    INTEGER, INTENT(IN) :: nf, nedgestot
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
-    COMPLEX (KIND=dp), DIMENSION(:), INTENT(IN) :: x
+    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: x
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r
 
     COMPLEX (KIND=dp), DIMENSION(3), INTENT(INOUT) :: e, h
-
-    INTEGER :: n, q, index, ns
-    COMPLEX (KIND=dp) :: c1, c2, k, gae
-    COMPLEX (KIND=dp), DIMENSION(3,3) :: int1, int2, int3
-    COMPLEX (KIND=dp), DIMENSION(nedgestot) :: alpha, beta
+    COMPLEX (KIND=dp), DIMENSION(3,SIZE(ga)) :: e2, h2
+    COMPLEX (KIND=dp) :: gae
+    INTEGER :: nf
 
     e(:) = 0.0_dp
     h(:) = 0.0_dp
 
-    k = ri*omega/c0
+    CALL scat_fields_frags(mesh, ga, x, nedgestot, omega, ri, prd, r, e2, h2)
 
-    alpha = x(1:nedgestot)
-    beta = x((nedgestot+1):(2*nedgestot))
+    DO nf=1,SIZE(ga)
+       gae = ga(gai)%ef(nf)
+
+       e = e + gae*MATMUL(ga(gai)%j, e2(:,nf))
+       h = h + ga(gai)%detj*gae*MATMUL(ga(gai)%j, h2(:,nf))
+    END DO
+  END SUBROUTINE scat_fields_ga
+
+  SUBROUTINE scat_fields_invmap(mesh, ga, x, nedgestot, omega, ri, prd, gai, r, e, h)
+    TYPE(mesh_container), INTENT(IN) :: mesh
+    COMPLEX (KIND=dp), INTENT(IN) :: ri
+    REAL (KIND=dp), INTENT(IN) :: omega
+    INTEGER, INTENT(IN) :: nedgestot, gai
+    TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
+    TYPE(prdnfo), POINTER, INTENT(IN) :: prd
+    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: x
+    REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r
+
+    COMPLEX (KIND=dp), DIMENSION(3), INTENT(INOUT) :: e, h
+    COMPLEX (KIND=dp), DIMENSION(3,SIZE(ga)) :: e2, h2
+    COMPLEX (KIND=dp) :: cgae
+    INTEGER :: nf
+
+    e(:) = 0.0_dp
+    h(:) = 0.0_dp
+
+    CALL scat_fields_frags(mesh, ga, x, nedgestot, omega, ri, prd, r, e2, h2)
+
+    DO nf=1,SIZE(ga)
+       cgae = CONJG(ga(gai)%ef(nf))
+
+       e = e + cgae*MATMUL(TRANSPOSE(ga(gai)%j), e2(:,nf))
+       h = h + ga(gai)%detj*cgae*MATMUL(TRANSPOSE(ga(gai)%j), h2(:,nf))
+    END DO
+  END SUBROUTINE scat_fields_invmap
+
+  SUBROUTINE scat_fields_frags(mesh, ga, x, nedgestot, omega, ri, prd, r, e, h)
+    TYPE(mesh_container), INTENT(IN) :: mesh
+    COMPLEX (KIND=dp), INTENT(IN) :: ri
+    REAL (KIND=dp), INTENT(IN) :: omega
+    TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
+    INTEGER, INTENT(IN) :: nedgestot
+    TYPE(prdnfo), POINTER, INTENT(IN) :: prd
+    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: x
+    REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r
+
+    COMPLEX (KIND=dp), DIMENSION(3,SIZE(ga)), INTENT(INOUT) :: e, h
+
+    INTEGER :: n, q, index, ns, nf
+    COMPLEX (KIND=dp) :: c1, c2, k, gae
+    COMPLEX (KIND=dp), DIMENSION(3,3) :: int1, int2, int3
+
+    e(:,:) = 0.0_dp
+    h(:,:) = 0.0_dp
+
+    k = ri*omega/c0
 
     ! Coefficients of partial integrals.
     c1 = (0,1)*omega*mu0
@@ -82,18 +131,22 @@ CONTAINS
           DO q=1,3
              index = mesh%faces(n)%edge_indices(q)
              index = mesh%edges(index)%parent_index
-          
-             gae = ga(ns)%ef(nf)
-             
-             e = e + alpha(index)*gae*(c1*int1(:,q) + c2*int2(:,q)) +&
-                  gae*ga(ns)%detj*beta(index)*int3(:,q)
 
-             h = h + beta(index)*gae*ga(ns)%detj*(int1(:,q)/c2 + int2(:,q)/c1) -&
-                  gae*alpha(index)*int3(:,q)
+             DO nf=1,SIZE(ga)
+                
+                gae = ga(ns)%ef(nf)
+                
+                e(:,nf) = e(:,nf) + x(index,nf)*gae*(c1*int1(:,q) + c2*int2(:,q)) +&
+                     gae*ga(ns)%detj*x(index + nedgestot,nf)*int3(:,q)
+
+                h(:,nf) = h(:,nf) + x(index + nedgestot,nf)*gae*ga(ns)%detj*&
+                     (int1(:,q)/c2 + int2(:,q)/c1) -&
+                     gae*x(index,nf)*int3(:,q)
+             END DO
           END DO
        END DO
     END DO
-  END SUBROUTINE scat_fields_frag
+  END SUBROUTINE scat_fields_frags
 
   SUBROUTINE field_mesh(name, mesh, scale, nedgestot, x, ga, omega, ri)
     CHARACTER (LEN=*), INTENT(IN) :: name

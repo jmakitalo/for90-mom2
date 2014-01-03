@@ -316,6 +316,7 @@ CONTAINS
 
        IF(singular) THEN
           aint = intK3singular(MATMUL(TRANSPOSE(ga%j),r), faceind, edgeind, mesh, k, prd)*divfn
+          aint = MATMUL(ga%j, aint)
        END IF
 
        res(:,edgeind) = tmp*divfn + aint

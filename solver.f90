@@ -24,6 +24,7 @@ CONTAINS
     TYPE(prdnfo), POINTER :: prd
     COMPLEX (KIND=dp), DIMENSION(:,:,:,:), ALLOCATABLE :: src_coef
     COMPLEX (KIND=dp), DIMENSION(:), ALLOCATABLE :: src_vec
+    COMPLEX (KIND=dp), DIMENSION(:,:), ALLOCATABLE :: src_vec2
     COMPLEX (KIND=dp), DIMENSION(:), ALLOCATABLE :: epsp
     INTEGER, DIMENSION(b%mesh%nedges) :: ind
     TYPE(medium_prop) :: mprop
@@ -127,8 +128,8 @@ CONTAINS
        WRITE(*,*) sec_to_str(timer_end())
 
        ! If nonlinear media have been specified, compute second-order response.
-       IF(is_nonlinear(b)) THEN
-          WRITE(*,*) 'Solving nonlinear scattering'
+       IF(is_nl_centrosym(b)) THEN
+          WRITE(*,*) 'Solving nonlinear scattering from centrosymmetric material'
 
           ! Allocate memory for SH solution and auxiliary arrays.
           ALLOCATE(b%sols(n)%nlx(nbasis*2, nga, nsrc))
@@ -211,6 +212,85 @@ CONTAINS
           ! Free up memory reserved for the auxiliary arrays.
           DEALLOCATE(src_vec, src_coef, epsp)
        END IF
+
+       ! If nonlinear media have been specified, compute second-order response.
+       IF(is_nl_noncentrosym(b)) THEN
+          WRITE(*,*) 'Solving nonlinear scattering from non-centrosymmetric material'
+
+          ! Allocate memory for SH solution and auxiliary arrays.
+          ALLOCATE(b%sols(n)%nlx(nbasis*2, nga, nsrc))
+          ALLOCATE(src_coef(b%mesh%nedges*2,SIZE(b%domains),nga,nsrc))
+          ALLOCATE(src_vec2(b%mesh%nedges*2, nga))
+
+          b%sols(n)%nlx(:,:,:) = 0.0_dp
+          src_coef(:,:,:,:) = 0.0_dp
+          src_vec2(:,:) = 0.0_dp
+
+          ! Setup periodic GF for current wavelength.
+          ! Periodic GF must be setup again as it depends on wavelength,
+          ! which now corresponds to the SH.
+          DO m=1,SIZE(b%domains)
+             IF(b%domains(m)%gf_index/=-1) THEN
+                b%prd(b%domains(m)%gf_index)%cwl = find_closest(wl*0.5_dp,&
+                     b%prd(b%domains(m)%gf_index)%coef(:)%wl)
+             END IF
+          END DO
+          
+          ! Set lattice cell phase shifts according to domain 1.
+          IF(b%domains(1)%gf_index/=-1) THEN
+             prd => b%prd(b%domains(1)%gf_index)
+             phdx = EXP((0,1)*prd%dx*prd%coef(prd%cwl)%k0x)
+             phdy = EXP((0,1)*prd%dy*prd%coef(prd%cwl)%k0y)
+          END IF
+
+          WRITE(*,*) 'Computing sources'
+          CALL timer_start()
+
+          ! Go through each domain that is associated with nonlinear medium.
+          DO m=1,SIZE(b%domains)
+             IF(b%media(b%domains(m)%medium_index)%type/=mtype_nlb_dipole) THEN
+                CYCLE
+             END IF
+
+             ! Get medium properties for current wavelength.
+             mprop = b%media(b%domains(m)%medium_index)%prop(n)
+
+             ! Get mapping from local edge indices of domain m to global
+             ! edge indices, which correspond to solution coefficient indices.
+             nind = b%domains(m)%mesh%nedges
+             ind(1:nind) = b%domains(m)%mesh%edges(:)%parent_index
+
+             ! Compute the excitation source vectors for each source and representation.
+             DO l=1,nsrc
+                CALL srcvec_nlbulk_dipole(b%domains(m)%mesh, b%mesh%nedges, omega, mprop%ri,&
+                     mprop%shri, b%sols(n)%x(:,:,l), b%ga, mprop%nlb, src_vec2(1:(2*nind),:))
+                
+                ! Place the source vector elements to proper places by the use of
+                ! the edge index mappings.
+                b%sols(n)%nlx(ind(1:nind),:,l) = b%sols(n)%nlx(ind(1:nind),:,l) + src_vec2(1:nind,:)
+                
+                b%sols(n)%nlx(ind(1:nind)+nbasis,:,l) = b%sols(n)%nlx(ind(1:nind)+nbasis,:,l) +&
+                     src_vec2((nind+1):(2*nind),:)
+             END DO
+          END DO
+
+          WRITE(*,*) sec_to_str(timer_end())
+
+          ! Compute the system matrix for the nonlinear problem.
+          WRITE(*,*) 'Generating system matrix'
+          CALL timer_start()
+          CALL sysmat_pmchwt_nls(b, n, A, src_coef, b%sols(n)%nlx)
+          WRITE(*,*) sec_to_str(timer_end())
+
+          ! Solve the linear system of equations, enforcing boundary conditions.
+          WRITE(*,*) 'Solving system'
+          CALL timer_start()
+          CALL solve_systems(b%mesh, b%ga, phdx, phdy, A, b%sols(n)%nlx)
+          WRITE(*,*) sec_to_str(timer_end())
+
+          ! Free up memory reserved for the auxiliary arrays.
+          DEALLOCATE(src_vec2, src_coef)
+       END IF
     END DO
 
     DEALLOCATE(A)
@@ -257,8 +337,8 @@ CONTAINS
     END DO
   END SUBROUTINE solve_systems
 
-  ! Checks whether the batch contains nonlinear materials.
-  FUNCTION is_nonlinear(b) RESULT(res)
+  ! Checks whether the batch contains nonlinear centrosymmetric materials.
+  FUNCTION is_nl_centrosym(b) RESULT(res)
     TYPE(batch), INTENT(IN) :: b
     LOGICAL :: res
     INTEGER :: n
@@ -266,12 +346,28 @@ CONTAINS
     res = .FALSE.
 
     DO n=1,SIZE(b%media)
-       IF(b%media(n)%type==mtype_nls .OR. b%media(n)%type==mtype_nlb) THEN
+       IF(b%media(n)%type==mtype_nls .OR. b%media(n)%type==mtype_nlb_nonlocal) THEN
           res = .TRUE.
           RETURN
        END IF
     END DO
-  END FUNCTION is_nonlinear
+  END FUNCTION is_nl_centrosym
+
+  ! Checks whether the batch contains nonlinear non-centrosymmetric materials.
+  FUNCTION is_nl_noncentrosym(b) RESULT(res)
+    TYPE(batch), INTENT(IN) :: b
+    LOGICAL :: res
+    INTEGER :: n
+
+    res = .FALSE.
+
+    DO n=1,SIZE(b%media)
+       IF(b%media(n)%type==mtype_nlb_dipole) THEN
+          res = .TRUE.
+          RETURN
+       END IF
+    END DO
+  END FUNCTION is_nl_noncentrosym
 
   SUBROUTINE determine_epsp(b, dindex, wlindex, epsp)
     TYPE(batch), INTENT(IN) :: b

@@ -138,16 +138,22 @@ CONTAINS
   SUBROUTINE classify_edges(mesh, id, bnd)
     TYPE(mesh_container), INTENT(INOUT) :: mesh
     INTEGER, INTENT(IN) :: id, bnd
-    INTEGER :: n, m
+    INTEGER :: n, m, nbnd
+
+    nbnd = 0
 
     DO n=1,mesh%nedges
        DO m=1,mesh%nlines
           IF(mesh%lines(m)%id==id .AND.&
                cmp_pairs(mesh%edges(n)%node_indices, mesh%lines(m)%node_indices)) THEN
              mesh%edges(n)%bnd = bnd
+
+             nbnd = nbnd + 1
           END IF
        END DO
     END DO
+
+    WRITE(*,'(A,I0,A)') ' Classified ', nbnd, ' boundary edges'
 
   END SUBROUTINE classify_edges
 
@@ -264,11 +270,12 @@ CONTAINS
     END DO
   END SUBROUTINE invert_faces
 
-  FUNCTION extract_submesh(mesh, ids) RESULT(submesh)
+  FUNCTION extract_submesh(mesh, ids, vol_ids) RESULT(submesh)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, DIMENSION(:), INTENT(IN) :: ids
+    INTEGER, DIMENSION(:), POINTER, INTENT(IN) :: vol_ids
     TYPE(mesh_container) :: submesh
-    INTEGER :: n, m, nfaces
+    INTEGER :: n, m, nfaces, nsolids
     LOGICAL, DIMENSION(mesh%nnodes) :: nmask
     INTEGER, DIMENSION(mesh%nnodes) :: local_node_indices
 
@@ -287,6 +294,24 @@ CONTAINS
 
     submesh%nfaces = nfaces
     ALLOCATE(submesh%faces(1:nfaces))
+
+    ! Compute the number of solids for this submesh.
+    IF(ASSOCIATED(vol_ids)) THEN
+       nsolids = 0
+       DO n=1,mesh%nsolids
+          IF(COUNT(vol_ids==mesh%solids(n)%id)/=0) THEN
+             nsolids = nsolids + 1
+             DO m=1,4
+                nmask(mesh%solids(n)%node_indices(m)) = .TRUE.
+             END DO
+          END IF
+       END DO
+
+       submesh%nsolids = nsolids
+       ALLOCATE(submesh%solids(1:nsolids))
+    ELSE
+       submesh%nsolids = 0
+    END IF
 
     ! Copy the vertices.
     local_node_indices(:) = -1
@@ -314,9 +339,21 @@ CONTAINS
        END IF
     END DO
 
+    ! Copy the solids.
+    IF(ASSOCIATED(vol_ids)) THEN
+       m = 0
+       DO n=1,mesh%nsolids
+          IF(COUNT(vol_ids==mesh%solids(n)%id)/=0) THEN
+             m = m + 1
+             submesh%solids(m)%node_indices(1:4) = &
+                  local_node_indices(mesh%solids(n)%node_indices(1:4))
+             submesh%solids(m)%id = mesh%solids(n)%id
+          END IF
+       END DO
+    END IF
+
     submesh%nlines = 0
     submesh%nedges = 0
-    submesh%nsolids = 0
     submesh%nsolid_faces = 0
 
   END FUNCTION extract_submesh
@@ -918,7 +955,7 @@ CONTAINS
   SUBROUTINE build_mesh(mesh, scale)
     TYPE(mesh_container), INTENT(INOUT) :: mesh
     REAL (KIND=dp), INTENT(IN) :: scale
-    INTEGER :: n, m, l, cedge, nedges, nbnds
+    INTEGER :: n, m, l, cedge, nedges
     TYPE(edge), DIMENSION(:), ALLOCATABLE :: tmpedges
     LOGICAL :: found_edge
     INTEGER, DIMENSION(2) :: pair
@@ -999,11 +1036,10 @@ CONTAINS
     mesh%avelen = average_edge_length(mesh)
 
     WRITE(*,'(A,I0,:,A)') ' - Created ', cedge, ' unique edges'
-    WRITE(*,'(A,I0,:,A)') ' - Found ', nbnds, ' boundary edges'
 
-    IF(mesh%nsolids>0) THEN
-       CALL build_solid_faces(mesh)
-    END IF
+    !IF(mesh%nsolids>0) THEN
+    !   CALL build_solid_faces(mesh)
+    !END IF
 
     CALL compute_basis_data(mesh)
 
