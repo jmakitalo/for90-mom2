@@ -405,60 +405,79 @@ CONTAINS
 
   END SUBROUTINE read_scan_source
 
-  SUBROUTINE read_source(line, b)
+  ! Allocate source definitions.
+  SUBROUTINE read_nsrc(line, b)
+    CHARACTER (LEN=*), INTENT(IN) :: line
+    TYPE(batch), INTENT(INOUT) :: b
+    INTEGER :: n, i
+
+    READ(line,*) n
+
+    ALLOCATE(b%src(n))
+
+    WRITE(*,'(A,I0,A)') ' Allocated ', n, ' sources.'
+  END SUBROUTINE read_nsrc
+
+  SUBROUTINE read_ssrc(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
     CHARACTER (LEN=32) :: token
     CHARACTER (LEN=256) :: solname, src_meshname, nfocus
     CHARACTER (LEN=3) :: ext
-    INTEGER :: nga, nfrags
+    INTEGER :: nga, nfrags, index
 
-    ALLOCATE(b%src(1))
+    IF(ALLOCATED(b%src)==.FALSE.) THEN
+       WRITE(*,*) 'No sources allocated!'
+       STOP
+    END IF
 
-    b%src(1)%pos(:) = 0.0_dp
+    READ(line,*) index
 
-    READ(line,*) token
+    b%src(index)%pos(:) = 0.0_dp
+
+    READ(line,*) index, token
+
     IF(token=='pw') THEN
-       b%src(1)%type = src_pw
-       READ(line,*) token, b%src(1)%theta, b%src(1)%phi, b%src(1)%psi
-       b%src(1)%theta = b%src(1)%theta*degtorad
-       b%src(1)%phi = b%src(1)%phi*degtorad
-       b%src(1)%psi = b%src(1)%psi*degtorad
+       b%src(index)%type = src_pw
+       READ(line,*) index, token, b%src(index)%theta, b%src(index)%phi, b%src(index)%psi
+       b%src(index)%theta = b%src(index)%theta*degtorad
+       b%src(index)%phi = b%src(index)%phi*degtorad
+       b%src(index)%psi = b%src(index)%psi*degtorad
     ELSE IF(token=='focus_rad') THEN
-       b%src(1)%type = src_focus_rad
-       READ(line,*) token, b%src(1)%focal, b%src(1)%waist, b%src(1)%napr, nfocus
+       b%src(index)%type = src_focus_rad
+       READ(line,*) index, token, b%src(index)%focal, b%src(index)%waist, b%src(index)%napr, nfocus
     ELSE IF(token=='focus_x') THEN
-       b%src(1)%type = src_focus_x
-       READ(line,*) token, b%src(1)%focal, b%src(1)%waist, b%src(1)%napr, nfocus
+       b%src(index)%type = src_focus_x
+       READ(line,*) index, token, b%src(index)%focal, b%src(index)%waist, b%src(index)%napr, nfocus
     ELSE IF(token=='focus_y') THEN
-       b%src(1)%type = src_focus_y
-       READ(line,*) token, b%src(1)%focal, b%src(1)%waist, b%src(1)%napr, nfocus
+       b%src(index)%type = src_focus_y
+       READ(line,*) index, token, b%src(index)%focal, b%src(index)%waist, b%src(index)%napr, nfocus
     ELSE IF(token=='focus_hg01') THEN
-       b%src(1)%type = src_focus_hg01
-       READ(line,*) token, b%src(1)%focal, b%src(1)%waist, b%src(1)%napr, nfocus
+       b%src(index)%type = src_focus_hg01
+       READ(line,*) index, token, b%src(index)%focal, b%src(index)%waist, b%src(index)%napr, nfocus
     ELSE IF(token=='focus_azimut') THEN
-       b%src(1)%type = src_focus_azim
-       READ(line,*) token, b%src(1)%focal, b%src(1)%waist, b%src(1)%napr, nfocus
+       b%src(index)%type = src_focus_azim
+       READ(line,*) index, token, b%src(index)%focal, b%src(index)%waist, b%src(index)%napr, nfocus
     ELSE IF(token=='dipole') THEN
-       b%src(1)%type = src_dipole
-       READ(line,*) token, b%src(1)%pos, b%src(1)%dmom
+       b%src(index)%type = src_dipole
+       READ(line,*) index, token, b%src(index)%pos, b%src(index)%dmom
     ELSE
        WRITE(*,*) 'Invalid source type!'
     END IF
 
-    IF(b%src(1)%type==src_focus_rad .OR. b%src(1)%type==src_focus_x .OR.&
-         b%src(1)%type==src_focus_y .OR. b%src(1)%type==src_focus_hg01 .OR.&
-         b%src(1)%type==src_focus_azim) THEN
+    IF(b%src(index)%type==src_focus_rad .OR. b%src(index)%type==src_focus_x .OR.&
+         b%src(index)%type==src_focus_y .OR. b%src(index)%type==src_focus_hg01 .OR.&
+         b%src(index)%type==src_focus_azim) THEN
        IF(nfocus=='true') THEN
-          b%src(1)%nfocus = .TRUE.
+          b%src(index)%nfocus = .TRUE.
        ELSE IF(nfocus=='false') THEN
-          b%src(1)%nfocus = .FALSE.
+          b%src(index)%nfocus = .FALSE.
        ELSE
           WRITE(*,*) 'Unrecognized source argument value!'
           STOP
        END IF
     END IF
-  END SUBROUTINE read_source
+  END SUBROUTINE read_ssrc
 
   SUBROUTINE read_npgf(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
@@ -566,21 +585,21 @@ CONTAINS
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
     TYPE(nfield_plane) :: nfplane
-    INTEGER :: wlindex, dindex
+    INTEGER :: wlindex, srcindex, dindex
     CHARACTER (LEN=256) :: oname, numstr
     REAL (KIND=dp) :: omega
     COMPLEX (KIND=dp) :: ri
 
-    READ(line,*) wlindex, dindex
+    READ(line,*) wlindex, srcindex, dindex
 
-    WRITE(numstr, '(A,I0,A,I0)') '-wl', wlindex, '-d', dindex
+    WRITE(numstr, '(A,I0,A,I0,A,I0)') '-wl', wlindex, '-s', srcindex, '-d', dindex
     oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '.msh'
 
     omega = 2.0_dp*pi*c0/b%sols(wlindex)%wl
     ri = b%media(b%domains(dindex)%medium_index)%prop(wlindex)%ri
        
     CALL field_mesh(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
-         b%sols(wlindex)%x(:,:,1), b%ga, omega, ri)
+         b%sols(wlindex)%x(:,:,srcindex), b%ga, omega, ri)
 
     IF(ALLOCATED(b%sols(wlindex)%nlx)) THEN
        oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-sh.msh'
@@ -588,7 +607,7 @@ CONTAINS
        ri = b%media(b%domains(dindex)%medium_index)%prop(wlindex)%shri
        
        CALL field_mesh(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
-            b%sols(wlindex)%nlx(:,:,1), b%ga, 2.0_dp*omega, ri)
+            b%sols(wlindex)%nlx(:,:,srcindex), b%ga, 2.0_dp*omega, ri)
 
     END IF
   END SUBROUTINE read_nfms
@@ -878,8 +897,10 @@ CONTAINS
           CALL read_nmed(line, b)
        ELSE IF(scmd=='smed') THEN
           CALL read_smed(line, b)
-       ELSE IF(scmd=='srce') THEN
-          CALL read_source(line, b)
+       ELSE IF(scmd=='nsrc') THEN
+          CALL read_nsrc(line, b)
+       ELSE IF(scmd=='ssrc') THEN
+          CALL read_ssrc(line, b)
        ELSE IF(scmd=='solv') THEN
           CALL solve_batch(b)
        ELSE IF(scmd=='npgf') THEN

@@ -40,31 +40,33 @@ CONTAINS
     END DO
   END SUBROUTINE scat_fields
 
-  SUBROUTINE scat_fields_ga(mesh, ga, x, nedgestot, omega, ri, prd, gai, r, e, h)
+  SUBROUTINE scat_fields_ga(mesh, ga, x, nedgestot, omega, ri, prd, r, e, h)
     TYPE(mesh_container), INTENT(IN) :: mesh
     COMPLEX (KIND=dp), INTENT(IN) :: ri
     REAL (KIND=dp), INTENT(IN) :: omega
-    INTEGER, INTENT(IN) :: nedgestot, gai
+    INTEGER, INTENT(IN) :: nedgestot
     TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
     COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: x
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r
 
-    COMPLEX (KIND=dp), DIMENSION(3), INTENT(INOUT) :: e, h
+    COMPLEX (KIND=dp), DIMENSION(3,SIZE(ga)), INTENT(INOUT) :: e, h
     COMPLEX (KIND=dp), DIMENSION(3,SIZE(ga)) :: e2, h2
     COMPLEX (KIND=dp) :: gae
-    INTEGER :: nf
+    INTEGER :: nf, na
 
-    e(:) = 0.0_dp
-    h(:) = 0.0_dp
+    e(:,:) = 0.0_dp
+    h(:,:) = 0.0_dp
 
     CALL scat_fields_frags(mesh, ga, x, nedgestot, omega, ri, prd, r, e2, h2)
 
-    DO nf=1,SIZE(ga)
-       gae = ga(gai)%ef(nf)
-
-       e = e + gae*MATMUL(ga(gai)%j, e2(:,nf))
-       h = h + ga(gai)%detj*gae*MATMUL(ga(gai)%j, h2(:,nf))
+    DO na=1,SIZE(ga)
+       DO nf=1,SIZE(ga)
+          gae = ga(na)%ef(nf)
+          
+          e(:,na) = e(:,na) + gae*MATMUL(ga(na)%j, e2(:,nf))
+          h(:,na) = h(:,na) + ga(na)%detj*gae*MATMUL(ga(na)%j, h2(:,nf))
+       END DO
     END DO
   END SUBROUTINE scat_fields_ga
 

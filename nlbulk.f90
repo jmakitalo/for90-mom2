@@ -11,25 +11,27 @@ MODULE nlbulk
 
 CONTAINS
   ! Computes the action on nonlinear bulk dipole polarization Pnlb.
-  FUNCTION Pnlb_dipole_ga(mesh, nedgestot, omegaff, ri, x, ga, gai, nlb, r) RESULT(Pnlb)
+  FUNCTION Pnlb_dipole_ga(mesh, nedgestot, omegaff, ri, x, ga, nlb, r) RESULT(Pnlb)
     TYPE(mesh_container), INTENT(IN) :: mesh
     REAL (KIND=dp), INTENT(IN) :: omegaff
     COMPLEX (KIND=dp), INTENT(IN) :: ri
     COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: x
     TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
-    INTEGER, INTENT(IN) :: nedgestot, gai
+    INTEGER, INTENT(IN) :: nedgestot
     TYPE(medium_nlb), INTENT(IN) :: nlb
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r
 
-    COMPLEX (KIND=dp), DIMENSION(3) :: Pnlb, e, h
+    COMPLEX (KIND=dp), DIMENSION(3,SIZE(ga)) :: Pnlb, e, h
     COMPLEX (KIND=dp) :: Pnlbz
-    INTEGER :: nf
+    INTEGER :: na
 
-    CALL scat_fields_ga(mesh, ga, x, nedgestot, omegaff, ri, NULL(), gai, r, e, h)
+    CALL scat_fields_ga(mesh, ga, x, nedgestot, omegaff, ri, NULL(), r, e, h)
 
-    Pnlbz = eps0*(nlb%chi2zzz)*(e(3)**2)
+    DO na=1,SIZE(ga)
+       Pnlbz = eps0*(nlb%chi2zzz)*(e(3,na)**2)
 
-    Pnlb = (/0.0_dp, 0.0_dp, 1.0_dp/)*Pnlbz
+       Pnlb(:,na) = (/0.0_dp, 0.0_dp, 1.0_dp/)*Pnlbz
+    END DO
   END FUNCTION Pnlb_dipole_ga
 
   ! Computes the excitation vector for a second-order dipolar bulk source for
@@ -68,23 +70,25 @@ CONTAINS
 
     ! Pre-compute the current sources for all representations.
 
+    WRITE(*,*) 'Computing current sources'
+
     !$OMP PARALLEL DEFAULT(NONE)&
     !$OMP SHARED(mesh,nweights,ga,omegash,nedgestot,omegaff,riff,xff,nlb,Jb)&
-    !$OMP PRIVATE(m,na,t,qp)
+    !$OMP PRIVATE(m,t,qp)
     !$OMP DO SCHEDULE(STATIC)
     DO m=1,mesh%nsolids
 
        qp = GLsolid_quad_points(m, mesh)
 
-       DO na=1,SIZE(ga)
-          DO t=1,nweights
-             Jb(:,t,na,m) = -(0,1)*omegash*Pnlb_dipole_ga(mesh, nedgestot, omegaff,&
-                  riff, xff, ga, na, nlb, qp(:,t))
-          END DO
+       DO t=1,nweights
+          Jb(:,t,:,m) = -(0,1)*omegash*Pnlb_dipole_ga(mesh, nedgestot, omegaff,&
+               riff, xff, ga, nlb, qp(:,t))
        END DO
     END DO
     !$OMP END DO
     !$OMP END PARALLEL
+
+    WRITE(*,*) 'Computing source vector integrals'
 
     DO na=1,SIZE(ga)
        DO na2=1,SIZE(ga)

@@ -271,6 +271,8 @@ CONTAINS
                 
                 b%sols(n)%nlx(ind(1:nind)+nbasis,:,l) = b%sols(n)%nlx(ind(1:nind)+nbasis,:,l) +&
                      src_vec2((nind+1):(2*nind),:)
+
+                WRITE(*,'(I0,A,I0)') l, ' of ', nsrc
              END DO
           END DO
 
