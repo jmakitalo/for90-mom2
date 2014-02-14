@@ -95,17 +95,18 @@ CONTAINS
     INTEGER, INTENT(IN) :: nedgestot
     TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
-    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: x
+    COMPLEX (KIND=dp), DIMENSION(:,:,:), INTENT(IN) :: x
 
     COMPLEX (KIND=dp), DIMENSION(3) :: alpha
-    INTEGER, PARAMETER :: ntheta = 40
-    INTEGER, PARAMETER :: nphi = 80
+    INTEGER, PARAMETER :: ntheta = 80
+    INTEGER, PARAMETER :: nphi = 160
     INTEGER :: n, nt, np
     REAL (KIND=dp), DIMENSION(ntheta) :: thetaw, thetap
     REAL (KIND=dp), DIMENSION(nphi) :: phiw, phip
     REAL (KIND=dp), DIMENSION(3,3) :: map
     REAL (KIND=dp), DIMENSION(3) :: r
-    COMPLEX (KIND=dp), DIMENSION(3) :: e, h, integ
+    COMPLEX (KIND=dp), DIMENSION(3,1) :: e, h
+    COMPLEX (KIND=dp), DIMENSION(3) :: integ
     COMPLEX (KIND=dp) :: f, k
 
     k = ri*omega/c0
@@ -148,7 +149,7 @@ CONTAINS
              h = MATMUL(CMPLX(TRANSPOSE(map),KIND=dp), h)
 
              integ(n) = integ(n) +&
-                  thetaw(nt)*phiw(np)*COS(thetap(nt))*SIN(thetap(nt))*dotc(CMPLX(r,KIND=dp), e)
+                  thetaw(nt)*phiw(np)*COS(thetap(nt))*SIN(thetap(nt))*dotc(CMPLX(r,KIND=dp), e(:,1))
           END DO
        END DO
     END DO

@@ -581,6 +581,54 @@ CONTAINS
 
   END SUBROUTINE read_diff
 
+  SUBROUTINE read_trns(line, b)
+    CHARACTER (LEN=*), INTENT(IN) :: line
+    TYPE(batch), INTENT(INOUT) :: b
+    INTEGER :: fid=10, iovar, n, dindexT, dindexR
+    REAL (KIND=dp) :: wl, omega, z0T, z0R
+    REAL (KIND=dp), DIMENSION(b%nwl,3) :: data
+    COMPLEX (KIND=dp) :: ri, ri_inc
+    TYPE(prdnfo), POINTER :: prd
+    CHARACTER (LEN=64) :: addsrc_str
+    LOGICAL :: addsrc
+
+    READ(line,*) dindexT, z0T, addsrc_str, dindexR, z0R
+
+    IF(TRIM(addsrc_str)=='true') THEN
+       addsrc = .TRUE.
+    ELSE
+       addsrc = .FALSE.
+    END IF
+
+    WRITE(*,*) 'Computing transmittance'
+
+    DO n=1,b%nwl
+       wl = b%sols(n)%wl
+       omega = 2.0_dp*pi*c0/wl
+       ri_inc = b%media(b%domains(1)%medium_index)%prop(n)%ri
+
+       data(n,1) = wl
+
+       ri = b%media(b%domains(dindexT)%medium_index)%prop(n)%ri
+       prd => b%prd(b%domains(dindexT)%gf_index)
+       prd%cwl = find_closest(wl, prd%coef(:)%wl)
+
+       data(n,2) = transmittance(b%domains(dindexT)%mesh, b%ga, addsrc, b%src(1),&
+            b%sols(n)%x, b%mesh%nedges, omega, ri, ri_inc, prd, z0T, -1.0_dp)
+
+       ri = b%media(b%domains(dindexR)%medium_index)%prop(n)%ri
+       prd => b%prd(b%domains(dindexR)%gf_index)
+       prd%cwl = find_closest(wl, prd%coef(:)%wl)
+
+       data(n,3) = transmittance(b%domains(dindexR)%mesh, b%ga, .FALSE., b%src(1),&
+            b%sols(n)%x, b%mesh%nedges, omega, ri, ri_inc, prd, z0R, 1.0_dp)
+
+       WRITE(*,'(A,I0,A,I0,:)') ' Wavelength ',  n, ' of ', b%nwl
+    END DO
+
+    CALL write_data(TRIM(b%name) // '-trns.dat', data)
+  END SUBROUTINE read_trns
+
   SUBROUTINE read_nfms(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
@@ -755,7 +803,7 @@ CONTAINS
        !   prd => NULL()
        !END IF
 
-       alpha = polarizability(b%domains(1)%mesh, b%ga, b%sols(n)%x(:,:,1),&
+       alpha = polarizability(b%domains(1)%mesh, b%ga, b%sols(n)%x,&
             b%mesh%nedges, omega, ri, prd, a)
 
        data(n,1) = b%sols(n)%wl
@@ -929,6 +977,8 @@ CONTAINS
           CALL read_plrz(line, b)
        ELSE IF(scmd=='scan') THEN
           CALL read_scan_source(line, b)
+       ELSE IF(scmd=='trns') THEN
+          CALL read_trns(line, b)
        ELSE
           WRITE(*,*) 'Unrecognized command ', scmd, '!'
        END IF

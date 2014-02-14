@@ -15,22 +15,24 @@ CONTAINS
     TYPE(mesh_container), INTENT(IN) :: mesh
     REAL (KIND=dp), INTENT(IN) :: omegaff
     COMPLEX (KIND=dp), INTENT(IN) :: ri
-    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: x
+    COMPLEX (KIND=dp), DIMENSION(:,:,:), INTENT(IN) :: x
     TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
     INTEGER, INTENT(IN) :: nedgestot
     TYPE(medium_nlb), INTENT(IN) :: nlb
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r
 
-    COMPLEX (KIND=dp), DIMENSION(3,SIZE(ga)) :: Pnlb, e, h
+    COMPLEX (KIND=dp), DIMENSION(3,SIZE(ga),SIZE(x,3)) :: Pnlb, e, h
     COMPLEX (KIND=dp) :: Pnlbz
-    INTEGER :: na
+    INTEGER :: na, ns
 
     CALL scat_fields_ga(mesh, ga, x, nedgestot, omegaff, ri, NULL(), r, e, h)
 
     DO na=1,SIZE(ga)
-       Pnlbz = eps0*(nlb%chi2zzz)*(e(3,na)**2)
-
-       Pnlb(:,na) = (/0.0_dp, 0.0_dp, 1.0_dp/)*Pnlbz
+       DO ns=1,SIZE(x,3)
+          Pnlbz = eps0*(nlb%chi2zzz)*(e(3,na,ns)**2)
+          
+          Pnlb(:,na,ns) = (/0.0_dp, 0.0_dp, 1.0_dp/)*Pnlbz
+       END DO
     END DO
   END FUNCTION Pnlb_dipole_ga
 
@@ -41,23 +43,27 @@ CONTAINS
     INTEGER, INTENT(IN) :: nedgestot
     REAL (KIND=dp), INTENT(IN) :: omegaff
     COMPLEX (KIND=dp), INTENT(IN) :: riff, rish
-    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: xff
+    COMPLEX (KIND=dp), DIMENSION(:,:,:), INTENT(IN) :: xff
     TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
     TYPE(medium_nlb), INTENT(IN) :: nlb
 
-    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(INOUT) :: src
+    COMPLEX (KIND=dp), DIMENSION(:,:,:), INTENT(INOUT) :: src
 
-    REAL (KIND=dp) :: omegash, vol
-    COMPLEX (KIND=dp), DIMENSION(3,SIZE(volQw),SIZE(ga),mesh%nsolids) :: Jb
+    REAL (KIND=dp) :: omegash, vol, thresholdsq
+    COMPLEX (KIND=dp), DIMENSION(3,SIZE(volQw),SIZE(ga),SIZE(xff,3)) :: Jb
     COMPLEX (KIND=dp), DIMENSION(3) :: jacJb
-    REAL (KIND=dp), DIMENSION(3) ::rp
+    REAL (KIND=dp), DIMENSION(3) ::rp, diff
     COMPLEX (KIND=dp) :: int1, int2, int3, c1, c2, k, cgae
-    INTEGER :: nedges, nweights, m, n, p, q, t, na, na2, nr, index
+    INTEGER :: nedges, nweights, m, n, p, q, t, na, na2, nr, index, ns, progress
     REAL (KIND=dp), DIMENSION(3,SIZE(volQw)) :: qp
-    COMPLEX (KIND=dp), DIMENSION(3,3,SIZE(volQw),mesh%nfaces) :: intaux1, intaux2, intaux3
+    COMPLEX (KIND=dp), DIMENSION(3,3,SIZE(volQw),mesh%nfaces,SIZE(ga),SIZE(ga)) :: intaux1,&
+         intaux2, intaux3
+    LOGICAL :: near
 
     nedges = mesh%nedges
     nweights = SIZE(volQw)
+
+    thresholdsq = (mesh%avelen*3)**2
 
     ! Second-harmonic frequency.
     omegash = 2.0_dp*omegaff
@@ -66,59 +72,65 @@ CONTAINS
     c1 = (0,1)*omegash*mu0
     c2 = 1.0_dp/((0,1)*omegash*eps0*(rish**2))
 
-    src(:,:) = 0.0_dp
+    src(:,:,:) = 0.0_dp
 
-    ! Pre-compute the current sources for all representations.
+    progress = 0
 
-    WRITE(*,*) 'Computing current sources'
-
-    !$OMP PARALLEL DEFAULT(NONE)&
-    !$OMP SHARED(mesh,nweights,ga,omegash,nedgestot,omegaff,riff,xff,nlb,Jb)&
-    !$OMP PRIVATE(m,t,qp)
-    !$OMP DO SCHEDULE(STATIC)
     DO m=1,mesh%nsolids
-
+       
        qp = GLsolid_quad_points(m, mesh)
+       vol = mesh%solids(m)%volume
 
-       DO t=1,nweights
-          Jb(:,t,:,m) = -(0,1)*omegash*Pnlb_dipole_ga(mesh, nedgestot, omegaff,&
-               riff, xff, ga, nlb, qp(:,t))
-       END DO
-    END DO
-    !$OMP END DO
-    !$OMP END PARALLEL
-
-    WRITE(*,*) 'Computing source vector integrals'
-
-    DO na=1,SIZE(ga)
-       DO na2=1,SIZE(ga)
-          DO m=1,mesh%nsolids
-
-             qp = GLsolid_quad_points(m, mesh)
-             vol = mesh%solids(m)%volume
-
-             ! Pre-compute field integrals in parallel.
+       ! Pre-compute field integrals in parallel.
+       DO na=1,SIZE(ga)
+          DO na2=1,SIZE(ga)
              
              !$OMP PARALLEL DEFAULT(NONE)&
-             !$OMP SHARED(mesh,nweights,ga,intaux1,intaux2,intaux3,k,na,na2,qp)&
-             !$OMP PRIVATE(n,t,rp)
+             !$OMP SHARED(mesh,nweights,ga,intaux1,intaux2,intaux3,k,na,na2,qp,thresholdsq)&
+             !$OMP PRIVATE(n,t,rp,diff,near)
              !$OMP DO SCHEDULE(STATIC)
              DO n=1,mesh%nfaces
                 DO t=1,nweights
                    rp = MATMUL(ga(na2)%j, qp(:,t))
+
+                   diff = rp - MATMUL(ga(na)%j, mesh%faces(n)%cp)
+                   IF(SUM(diff*diff)<thresholdsq) THEN
+                      near = .TRUE.
+                   ELSE
+                      near = .FALSE.
+                   END IF
                    
-                   intaux1(:,:,t,n) = intK2(rp, n, mesh, k, ga(na), NULL(), .TRUE.)
-                   intaux2(:,:,t,n) = intK3(rp, n, mesh, k, ga(na), NULL(), .TRUE.)
-                   intaux3(:,:,t,n) = intK4(rp, n, mesh, k, ga(na), -1, NULL(), .TRUE.)
+                   intaux1(:,:,t,n,na2,na) = intK2(rp, n, mesh, k, ga(na), NULL(), near)
+                   intaux2(:,:,t,n,na2,na) = intK3(rp, n, mesh, k, ga(na), NULL(), near)
+                   intaux3(:,:,t,n,na2,na) = intK4(rp, n, mesh, k, ga(na), -1, NULL(), near)
                 END DO
              END DO
              !$OMP END DO
              !$OMP END PARALLEL
+          END DO
+       END DO
 
-             DO nr=1,SIZE(ga)
-                
-                cgae = CONJG(ga(na)%ef(nr))
-                
+       ! Pre-compute the current sources for all representations.
+
+       !$OMP PARALLEL DEFAULT(NONE)&
+       !$OMP SHARED(nweights,Jb,omegash,mesh,nedgestot,omegaff,riff,xff,ga,nlb,qp)&
+       !$OMP PRIVATE(t)
+       !$OMP DO SCHEDULE(STATIC)
+       DO t=1,nweights
+          Jb(:,t,:,:) = -(0,1)*omegash*Pnlb_dipole_ga(mesh, nedgestot, omegaff,&
+               riff, xff, ga, nlb, qp(:,t))
+       END DO
+       !$OMP END DO
+       !$OMP END PARALLEL
+
+       !$OMP PARALLEL DEFAULT(NONE)&
+       !$OMP SHARED(xff,nweights,omegash,mesh,nedgestot,omegaff,riff,ga,nlb,qp,volQw,intaux1,intaux2,intaux3,c1,c2,vol,src,m,nedges,Jb)&
+       !$OMP PRIVATE(ns,t,na,na2,nr,cgae,n,q,int1,int2,int3,index)
+       !$OMP DO SCHEDULE(STATIC)
+       DO ns=1,SIZE(xff,3)
+          DO na=1,SIZE(ga)
+             DO na2=1,SIZE(ga)
+                   
                 DO n=1,mesh%nfaces
                    
                    DO q=1,3
@@ -128,9 +140,9 @@ CONTAINS
                       int3 = 0.0_dp
                       
                       DO t=1,nweights
-                         int1 = int1 + volQw(t)*dotc(Jb(:,t,na2,m), intaux1(:,q,t,n))
-                         int2 = int2 + volQw(t)*dotc(Jb(:,t,na2,m), intaux2(:,q,t,n))
-                         int3 = int3 + volQw(t)*dotc(Jb(:,t,na2,m), intaux3(:,q,t,n))
+                         int1 = int1 + volQw(t)*dotc(Jb(:,t,na2,ns), intaux1(:,q,t,n,na2,na))
+                         int2 = int2 + volQw(t)*dotc(Jb(:,t,na2,ns), intaux2(:,q,t,n,na2,na))
+                         int3 = int3 + volQw(t)*dotc(Jb(:,t,na2,ns), intaux3(:,q,t,n,na2,na))
                       END DO
                       
                       int1 = c1*int1*vol
@@ -138,19 +150,34 @@ CONTAINS
                       int3 = int3*vol
                       
                       index = mesh%faces(n)%edge_indices(q)
-                      
-                      src(index,nr) = src(index,nr) + cgae*(int1 - int2)
-                      src(index + nedges,nr) = src(index + nedges,nr) + cgae*ga(na)%detj*int3
+
+                      DO nr=1,SIZE(ga)
+                         cgae = CONJG(ga(na)%ef(nr))
+                         
+                         src(index,nr,ns) = src(index,nr,ns) + cgae*(int1 - int2)
+                         src(index + nedges,nr,ns) = src(index + nedges,nr,ns) &
+                              + cgae*ga(na)%detj*int3
+                      END DO
                    END DO
+                   
                 END DO
-
              END DO
+             
           END DO
-
        END DO
+       !$OMP END DO
+       !$OMP END PARALLEL
+
+       IF(progress>mesh%nsolids/10) THEN
+          WRITE(*,'(A,I0,A)') 'Computed ', NINT(100*REAL(m)/mesh%nsolids), ' percent of sources'
+          progress = 0
+       END IF
+
+       progress = progress + 1
+
     END DO
 
-    src(:,:) = src(:,:)/REAL(SIZE(ga))
+    src(:,:,:) = src(:,:,:)/REAL(SIZE(ga))
   END SUBROUTINE srcvec_nlbulk_dipole
 
 END MODULE nlbulk

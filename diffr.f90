@@ -211,43 +211,37 @@ CONTAINS
 
   END FUNCTION diff_irradiance
 
-  FUNCTION diffracted_power(b, wlindex, dindex, r0, xorder, yorder) RESULT(power)
-    TYPE(batch), INTENT(IN) :: b
-    INTEGER, INTENT(IN) :: wlindex, dindex, xorder, yorder
-    REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r0
+  FUNCTION transmittance(mesh, ga, addsrc, src, x, nedgestot, omega, ri, ri_inc, prd,&
+       z0, zsign) RESULT(power)
+    TYPE(mesh_container), INTENT(IN) :: mesh
+    LOGICAL, INTENT(IN) :: addsrc
+    TYPE(srcdata), INTENT(IN) :: src
+    COMPLEX (KIND=dp), INTENT(IN) :: ri, ri_inc
+    REAL (KIND=dp), INTENT(IN) :: omega
+    TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
+    INTEGER, INTENT(IN) :: nedgestot
+    TYPE(prdnfo), POINTER, INTENT(IN) :: prd
+    COMPLEX (KIND=dp), DIMENSION(:,:,:), INTENT(IN) :: x
+    REAL (KIND=dp), INTENT(IN) :: z0, zsign
 
-    REAL (KIND=dp) :: power, wl, omega
+    REAL (KIND=dp) :: power
     REAL (KIND=dp), DIMENSION(:), ALLOCATABLE :: qwx, ptx, qwy, pty
-    COMPLEX (KIND=dp), DIMENSION(3) :: e, h, einc, hinc, auxe, auxh, gg
-    COMPLEX (KIND=dp), DIMENSION(6) :: ff
-    COMPLEX (KIND=dp) :: ri, ri1, k
+    COMPLEX (KIND=dp), DIMENSION(3,1) :: e, h
+    COMPLEX (KIND=dp), DIMENSION(3) :: einc, hinc, poynting
+    COMPLEX (KIND=dp) :: k
     REAL (KIND=dp), DIMENSION(3) :: pt
-    REAL (KIND=dp) :: irrinc, hdx, hdy, pinc, sgn
+    REAL (KIND=dp) :: hdx, hdy, pinc
     INTEGER :: n, m, nx, ny
-    REAL (KIND=dp), DIMENSION(3) :: xaxis, yaxis, dir
-    TYPE(prdnfo), POINTER :: prd
-
-    prd => b%prd(b%domains(dindex)%gf_index)
-
-    wl = b%sols(wlindex)%wl
-    omega = 2.0_dp*pi*c0/wl
-    ri = b%media(b%domains(dindex)%medium_index)%prop(wlindex)%ri
-    ri1 = b%media(b%domains(1)%medium_index)%prop(wlindex)%ri
+    REAL (KIND=dp), DIMENSION(3) :: xaxis, yaxis
 
     ! Wavenumber in diffraction medium.
     k = ri*omega/c0
-
-    ! Direction of incident plane-wave (and thus 0th order transmission).
-    dir = get_dir(prd%pwtheta, prd%pwphi)
 
     ! Select the number of integration points based on wavelength and period.
     !nx = NINT(prd%dx/b%sols(wlindex)%wl*20)
     !ny = NINT(prd%dy/b%sols(wlindex)%wl*20)
     nx = 51
     ny = 51
-
-    ! Minus one if transmission to segative half-plane z<0.
-    sgn = -1.0_dp
 
     ! Make sure that the numbers are odd.
     IF(MOD(nx,2)==0) THEN
@@ -272,49 +266,44 @@ CONTAINS
     CALL get_simpsons_weights(-hdy, hdy, ny-1, qwy)
     CALL get_simpsons_points(-hdy, hdy, ny-1, pty)
 
-    ff(:) = 0.0_dp
+    power = 0.0_dp
 
+             
     !$OMP PARALLEL DEFAULT(NONE)&
-    !$OMP SHARED(nx,ny,prd,r0,xaxis,ptx,yaxis,pty,dindex,b,wlindex,qwx,qwy,ff,omega,ri,dir,wl,sgn,k)&
-    !$OMP PRIVATE(m,n,pt,e,h,einc,hinc,gg,auxe,auxh)
-    !$OMP DO REDUCTION(+:ff) SCHEDULE(STATIC)
+    !$OMP SHARED(ny,nx,z0,xaxis,yaxis,ptx,pty,mesh,ga,x,nedgestot,omega,ri,prd,addsrc,src,qwx,qwy,zsign,power)&
+    !$OMP PRIVATE(m,n,pt,einc,hinc,e,h,poynting)
+    !$OMP DO REDUCTION(+:power) SCHEDULE(STATIC)
     DO m=1,ny
        DO n=1,nx
 
-          pt = r0 + xaxis*ptx(n) + yaxis*pty(m)
+          pt = (/0.0_dp,0.0_dp,z0/) + xaxis*ptx(n) + yaxis*pty(m)
           
-          CALL scat_fields(b%domains(dindex)%mesh, b%ga, b%sols(wlindex)%x(:,:,1), b%mesh%nedges,&
-               omega, ri, prd, pt, e, h)
+          CALL scat_fields(mesh, ga, x, nedgestot, omega, ri, prd, pt, e, h)
 
-          IF(dindex==1) THEN
-             CALL src_fields(b%src(1), omega, ri, pt, einc, hinc)
+          IF(addsrc) THEN
+             CALL src_fields(src, omega, ri, pt, einc, hinc)
 
-             e = e + einc
-             h = h + hinc
+             e(:,1) = e(:,1) + einc
+             h(:,1) = h(:,1) + hinc
           END IF
 
-          gg = gradGpff(r0 + dir*wl, pt, k, prd)
+          poynting = crossc(e(:,1), CONJG(h(:,1)))
 
-          auxe = sgn*crossc(gg, (/e(2), -e(1), (0.0_dp,0.0_dp)/))
-          auxh = sgn*crossc(gg, (/h(2), -h(1), (0.0_dp,0.0_dp)/))
-
-          ff = ff + 2.0_dp*qwx(n)*qwy(m)*(/auxe(:), auxh(:)/)
+          power = power + 0.5_dp*qwx(n)*qwy(m)*REAL(poynting(3)*zsign)
        END DO
     END DO
     !$OMP END DO
     !$OMP END PARALLEL
         
     ! cp is the Jacobian of the area integration.
-    ff = ff*prd%cp
+    power = power*prd%cp
 
-    pinc = REAL(ri1,KIND=dp)/(c0*mu0)
+    pinc = 0.5_dp*prd%dx*prd%dy*prd%cp*REAL(ri_inc,KIND=dp)/(c0*mu0)
     
-    ! The relative power diffracted to 0th order in the given domain.
-    ! power = (ABS(eff(1))**2 + ABS(eff(2))**2)*ri/ri1
-    power = dotr(REAL(crossc(ff(1:3), CONJG(ff(4:6))), KIND=dp), dir)/pinc
-    !power = -REAL(ff(1)*CONJG(ff(4)) - ff(2)*CONJG(ff(3)), KIND=dp)/pinc
+    ! Relative power.
+    power = power/pinc
 
     DEALLOCATE(qwx, ptx, qwy, pty)
 
-  END FUNCTION diffracted_power
+  END FUNCTION transmittance
 END MODULE diffr

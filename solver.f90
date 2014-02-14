@@ -24,7 +24,7 @@ CONTAINS
     TYPE(prdnfo), POINTER :: prd
     COMPLEX (KIND=dp), DIMENSION(:,:,:,:), ALLOCATABLE :: src_coef
     COMPLEX (KIND=dp), DIMENSION(:), ALLOCATABLE :: src_vec
-    COMPLEX (KIND=dp), DIMENSION(:,:), ALLOCATABLE :: src_vec2
+    COMPLEX (KIND=dp), DIMENSION(:,:,:), ALLOCATABLE :: src_vec2
     COMPLEX (KIND=dp), DIMENSION(:), ALLOCATABLE :: epsp
     INTEGER, DIMENSION(b%mesh%nedges) :: ind
     TYPE(medium_prop) :: mprop
@@ -220,11 +220,11 @@ CONTAINS
           ! Allocate memory for SH solution and auxiliary arrays.
           ALLOCATE(b%sols(n)%nlx(nbasis*2, nga, nsrc))
           ALLOCATE(src_coef(b%mesh%nedges*2,SIZE(b%domains),nga,nsrc))
-          ALLOCATE(src_vec2(b%mesh%nedges*2, nga))
+          ALLOCATE(src_vec2(b%mesh%nedges*2, nga, nsrc))
 
           b%sols(n)%nlx(:,:,:) = 0.0_dp
           src_coef(:,:,:,:) = 0.0_dp
-          src_vec2(:,:) = 0.0_dp
+          src_vec2(:,:,:) = 0.0_dp
 
           ! Setup periodic GF for current wavelength.
           ! Periodic GF must be setup again as it depends on wavelength,
@@ -261,18 +261,17 @@ CONTAINS
              ind(1:nind) = b%domains(m)%mesh%edges(:)%parent_index
 
              ! Compute the excitation source vectors for each source and representation.
-             DO l=1,nsrc
-                CALL srcvec_nlbulk_dipole(b%domains(m)%mesh, b%mesh%nedges, omega, mprop%ri,&
-                     mprop%shri, b%sols(n)%x(:,:,l), b%ga, mprop%nlb, src_vec2(1:(2*nind),:))
+             CALL srcvec_nlbulk_dipole(b%domains(m)%mesh, b%mesh%nedges, omega, mprop%ri,&
+                  mprop%shri, b%sols(n)%x, b%ga, mprop%nlb, src_vec2(1:(2*nind),:,:))
                 
+             DO l=1,nsrc
                 ! Place the source vector elements to proper places by the use of
                 ! the edge index mappings.
-                b%sols(n)%nlx(ind(1:nind),:,l) = b%sols(n)%nlx(ind(1:nind),:,l) + src_vec2(1:nind,:)
+                b%sols(n)%nlx(ind(1:nind),:,l) = b%sols(n)%nlx(ind(1:nind),:,l)&
+                     + src_vec2(1:nind,:,l)
                 
                 b%sols(n)%nlx(ind(1:nind)+nbasis,:,l) = b%sols(n)%nlx(ind(1:nind)+nbasis,:,l) +&
-                     src_vec2((nind+1):(2*nind),:)
-
-                WRITE(*,'(I0,A,I0)') l, ' of ', nsrc
+                     src_vec2((nind+1):(2*nind),:,l)
              END DO
           END DO
 

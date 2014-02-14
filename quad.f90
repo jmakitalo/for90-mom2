@@ -168,6 +168,11 @@ MODULE quad
 !  REAL (KIND=dp), DIMENSION(4), PARAMETER :: qw = qw4
 !  REAL (KIND=dp), DIMENSION(4,3), PARAMETER :: quadFactors = quadFactors4
 
+  REAL (KIND=dp), DIMENSION(1), PARAMETER :: volQw1 = (/1.0_dp/)
+
+  REAL (KIND=dp), DIMENSION(1,4), PARAMETER :: volQuadFactors1 = RESHAPE((/&
+       0.25_dp, 0.25_dp, 0.25_dp, 0.25_dp/), (/1,4/))
+
   REAL (KIND=dp), DIMENSION(4), PARAMETER :: volQw4 = (/&
        0.25_dp,&
        0.25_dp,&
@@ -261,6 +266,8 @@ MODULE quad
 
   REAL (KIND=dp), DIMENSION(4), PARAMETER :: volQw = volQw4
   REAL (KIND=dp), DIMENSION(4,4), PARAMETER :: volQuadFactors = volQuadFactors4
+!  REAL (KIND=dp), DIMENSION(1), PARAMETER :: volQw = volQw1
+!  REAL (KIND=dp), DIMENSION(1,4), PARAMETER :: volQuadFactors = volQuadFactors1
 
 CONTAINS
   FUNCTION GLquad_points(faceind, mesh) RESULT(res)
