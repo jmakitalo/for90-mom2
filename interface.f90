@@ -9,6 +9,7 @@ MODULE interface
   USE diffr
   USE ffields
   USE cs
+  USE nfpost
 
   IMPLICIT NONE
 
@@ -660,6 +661,91 @@ CONTAINS
     END IF
   END SUBROUTINE read_nfms
 
+  SUBROUTINE read_nfdm(line, b)
+    CHARACTER (LEN=*), INTENT(IN) :: line
+    TYPE(batch), INTENT(INOUT) :: b
+    TYPE(nfield_plane) :: nfplane
+    INTEGER :: wlindex, srcindex, dindex
+    CHARACTER (LEN=256) :: oname, numstr, addsrcstr
+    REAL (KIND=dp) :: omega
+    COMPLEX (KIND=dp) :: ri
+    LOGICAL :: addsrc
+    TYPE(prdnfo), POINTER :: prd
+    REAL (KIND=dp), DIMENSION(3) :: origin, dsize
+    INTEGER, DIMENSION(3) :: npoints
+
+    READ(line,*) wlindex, srcindex, dindex, addsrcstr, origin, dsize, npoints
+
+    addsrc = (TRIM(addsrcstr)=='true')
+
+    WRITE(numstr, '(A,I0,A,I0,A,I0)') '-wl', wlindex, '-s', srcindex, '-d', dindex
+    oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '.msh'
+
+    omega = 2.0_dp*pi*c0/b%sols(wlindex)%wl
+    ri = b%media(b%domains(dindex)%medium_index)%prop(wlindex)%ri
+
+    IF(b%domains(dindex)%gf_index>0) THEN
+       prd => b%prd(b%domains(dindex)%gf_index)
+       prd%cwl = find_closest(b%sols(wlindex)%wl, prd%coef(:)%wl)
+    ELSE
+       prd => NULL()
+    END IF
+    
+    CALL field_domain(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
+         b%sols(wlindex)%x(:,:,srcindex), b%ga, omega, ri, prd, b%src(srcindex), addsrc,&
+         origin, dsize, npoints)
+
+    IF(ALLOCATED(b%sols(wlindex)%nlx)) THEN
+       oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-sh.msh'
+       
+       ri = b%media(b%domains(dindex)%medium_index)%prop(wlindex)%shri
+
+       IF(b%domains(dindex)%gf_index>0) THEN
+          prd%cwl = find_closest(b%sols(wlindex)%wl/2, prd%coef(:)%wl)
+       END IF
+       
+       CALL field_domain(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
+            b%sols(wlindex)%nlx(:,:,srcindex), b%ga, 2.0_dp*omega, ri, prd, b%src(srcindex), .FALSE.,&
+            origin, dsize, npoints)
+    END IF
+  END SUBROUTINE read_nfdm
+
+  SUBROUTINE read_nfst(line, b)
+    CHARACTER (LEN=*), INTENT(IN) :: line
+    TYPE(batch), INTENT(INOUT) :: b
+    TYPE(nfield_plane) :: nfplane
+    INTEGER :: wlindex, srcindex, dindex
+    CHARACTER (LEN=256) :: oname, numstr, addsrcstr
+    REAL (KIND=dp) :: omega
+    COMPLEX (KIND=dp) :: ri
+    LOGICAL :: addsrc
+    TYPE(prdnfo), POINTER :: prd
+
+    READ(line,*) wlindex, srcindex, dindex, addsrcstr
+
+    addsrc = (TRIM(addsrcstr)=='true')
+
+    IF(addsrc) THEN
+       WRITE(*,*) 'Adding source'
+    END IF
+
+    WRITE(numstr, '(A,I0,A,I0,A,I0)') '-wl', wlindex, '-s', srcindex, '-d', dindex
+    oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-stream.msh'
+
+    omega = 2.0_dp*pi*c0/b%sols(wlindex)%wl
+    ri = b%media(b%domains(dindex)%medium_index)%prop(wlindex)%ri
+
+    IF(b%domains(dindex)%gf_index>0) THEN
+       prd => b%prd(b%domains(dindex)%gf_index)
+       prd%cwl = find_closest(b%sols(wlindex)%wl, prd%coef(:)%wl)
+    ELSE
+       prd => NULL()
+    END IF
+
+    CALL field_stream(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
+         b%sols(wlindex)%x(:,:,srcindex), b%ga, omega, ri, prd, b%src(srcindex), addsrc)
+  END SUBROUTINE read_nfst
+
   ! Computes a 2D image, where pixels correspond to source positions.
   ! Data may be plotted direcly with MATLAB's scimage, whence x-axis
   ! points right and y-axis points up.
@@ -965,6 +1051,10 @@ CONTAINS
           CALL read_sbnd(line, b)
        ELSE IF(scmd=='nfms') THEN
           CALL read_nfms(line, b)
+       ELSE IF(scmd=='nfdm') THEN
+          CALL read_nfdm(line, b)
+       ELSE IF(scmd=='nfst') THEN
+          CALL read_nfst(line, b)
        ELSE IF(scmd=='rcst') THEN
           CALL read_rcst(line, b)
        ELSE IF(scmd=='rcs2') THEN

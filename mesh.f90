@@ -1763,4 +1763,209 @@ CONTAINS
     CLOSE(fid)
 
   END SUBROUTINE save_vector_fields_msh
+
+  SUBROUTINE save_domain_vector_fields_msh(filename, mesh, pt, e, h, scale)
+    CHARACTER (LEN=*), INTENT(IN) :: filename
+    TYPE(mesh_container), INTENT(IN) :: mesh
+    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: e, h
+    REAL (KIND=dp), INTENT(IN) :: scale
+    REAL (KIND=dp), DIMENSION(:,:), INTENT(IN) :: pt
+
+    INTEGER :: fid = 10, iovar, n, nsteps, l, nnodes
+    COMPLEX (KIND=dp) :: fn
+
+    nsteps = 25
+
+    nnodes = mesh%nnodes + SIZE(pt,2)
+
+    OPEN(fid, FILE=TRIM(filename), ACTION='WRITE', IOSTAT=iovar)
+    IF(iovar>0) THEN
+       WRITE(*,*) 'Could not open output file' // filename // '!'
+       STOP
+    END IF
+
+    WRITE(fid,'(A11)') '$MeshFormat'
+    WRITE(fid,'(A7)') '2.1 0 8'
+    WRITE(fid,'(A14)') '$EndMeshFormat'
+
+    WRITE(fid,'(A6)') '$Nodes'
+    WRITE(fid,'(I0)') nnodes
+
+    DO n=1,mesh%nnodes
+       WRITE(fid,'(I0,A1,3EN15.3)') n, ' ', mesh%nodes(n)%p(1:3)/scale
+    END DO
+
+    DO n=1,SIZE(pt,2)
+       WRITE(fid,'(I0,A1,3EN15.3)') mesh%nnodes + n, ' ', pt(:,n)/scale
+    END DO
+
+    WRITE(fid,'(A9)') '$EndNodes'
+
+    WRITE(fid,'(A9)') '$Elements'
+    WRITE(fid,'(I0)') mesh%nfaces+SIZE(pt,2)
+
+    DO n=1,mesh%nfaces
+       WRITE(fid,'(I0,A11,I0,A1,I0,A1,I0)') n, ' 2 3 0 0 0 ', mesh%faces(n)%node_indices(1),&
+            ' ', mesh%faces(n)%node_indices(2), ' ', mesh%faces(n)%node_indices(3)
+    END DO
+
+    DO n=1,SIZE(pt,2)
+       WRITE(fid,'(I0,A12,I0)') n+mesh%nfaces, ' 15 3 0 0 0 ', mesh%nnodes+n
+    END DO
+
+    WRITE(fid,'(A12)') '$EndElements'
+
+    DO l=1,nsteps
+       WRITE(fid,'(A9)') '$NodeData'
+       WRITE(fid,'(I0)') 1
+       WRITE(fid,'(A7)') '"Re(E)"'
+       WRITE(fid,'(I0)') 0
+       WRITE(fid,'(I0)') 3
+       WRITE(fid,'(I0)') l-1
+       WRITE(fid,'(I0)') 3
+       WRITE(fid,'(I0)') SIZE(pt,2)
+
+       DO n=1,SIZE(pt,2)
+          WRITE(fid,'(I0,A1,3EN15.3)') mesh%nnodes + n, ' ',&
+               REAL(e(:,n)*EXP(-(0,1)*2*pi*REAL(l)/nsteps))
+       END DO
+       
+       WRITE(fid,'(A12)') '$EndNodeData'
+    END DO
+
+    DO l=1,nsteps
+       WRITE(fid,'(A9)') '$NodeData'
+       WRITE(fid,'(I0)') 1
+       WRITE(fid,'(A7)') '"Re(H)"'
+       WRITE(fid,'(I0)') 0
+       WRITE(fid,'(I0)') 3
+       WRITE(fid,'(I0)') l-1
+       WRITE(fid,'(I0)') 3
+       WRITE(fid,'(I0)') SIZE(pt,2)
+
+       DO n=1,SIZE(pt,2)
+          WRITE(fid,'(I0,A1,3EN15.3)') mesh%nnodes + n, ' ',&
+               REAL(h(:,n)*EXP(-(0,1)*2*pi*REAL(l)/nsteps))
+       END DO
+       
+       WRITE(fid,'(A12)') '$EndNodeData'
+    END DO
+
+    CLOSE(fid)
+  END SUBROUTINE save_domain_vector_fields_msh
+
+  SUBROUTINE save_stream_fields_msh(filename, mesh, npts, pts, e, scale)
+    CHARACTER (LEN=*), INTENT(IN) :: filename
+    TYPE(mesh_container), INTENT(IN) :: mesh
+    REAL (KIND=dp), DIMENSION(:,:,:), INTENT(IN) :: e
+    REAL (KIND=dp), INTENT(IN) :: scale
+    REAL (KIND=dp), DIMENSION(:,:,:,:), INTENT(IN) :: pts
+    INTEGER, DIMENSION(:,:) :: npts
+
+    INTEGER :: fid = 10, iovar, n, l, m, nnodes, nlines, index, nlines2, index2
+    COMPLEX (KIND=dp) :: fn
+
+    nnodes = mesh%nnodes + SUM(npts)
+
+    OPEN(fid, FILE=TRIM(filename), ACTION='WRITE', IOSTAT=iovar)
+    IF(iovar>0) THEN
+       WRITE(*,*) 'Could not open output file' // filename // '!'
+       STOP
+    END IF
+
+    WRITE(fid,'(A11)') '$MeshFormat'
+    WRITE(fid,'(A7)') '2.1 0 8'
+    WRITE(fid,'(A14)') '$EndMeshFormat'
+
+    WRITE(fid,'(A6)') '$Nodes'
+    WRITE(fid,'(I0)') nnodes
+
+    DO n=1,mesh%nnodes
+       WRITE(fid,'(I0,A1,3EN15.3)') n, ' ', mesh%nodes(n)%p(1:3)/scale
+    END DO
+
+    index = mesh%nnodes + 1
+
+    DO n=1,SIZE(npts,2)
+       DO m=1,SIZE(npts,1)
+          DO l=1,npts(m,n)
+             WRITE(fid,'(I0,A1,3EN15.3)') index, ' ', pts(:,l,m,n)/scale
+             index = index + 1
+          END DO
+       END DO
+    END DO
+
+    WRITE(fid,'(A9)') '$EndNodes'
+
+    nlines = 0
+
+    DO n=1,SIZE(npts,2)
+       DO m=1,SIZE(npts,1)
+          IF(npts(m,n)>0) THEN
+             nlines = nlines + npts(m,n)-1
+          END IF
+       END DO
+    END DO
+
+    WRITE(fid,'(A9)') '$Elements'
+    WRITE(fid,'(I0)') mesh%nfaces+nlines
+
+    DO n=1,mesh%nfaces
+       WRITE(fid,'(I0,A11,I0,A1,I0,A1,I0)') n, ' 2 3 0 0 0 ', mesh%faces(n)%node_indices(1),&
+            ' ', mesh%faces(n)%node_indices(2), ' ', mesh%faces(n)%node_indices(3)
+    END DO
+
+    index = 1
+    index2 = 1
+
+    DO n=1,SIZE(npts,2)
+       DO m=1,SIZE(npts,1)
+          DO l=1,(npts(m,n)-1)
+             WRITE(fid,'(I0,A11,I0,A1,I0)') mesh%nfaces + index2, ' 1 3 0 0 0 ', mesh%nnodes + index,&
+                  ' ', mesh%nnodes + index + 1
+             index = index + 1
+             index2 = index2 + 1
+          END DO
+
+          IF(npts(m,n)>0) THEN
+             index = index + 1
+          END IF
+       END DO
+    END DO
+
+    WRITE(fid,'(A12)') '$EndElements'
+
+    nlines2 = 0
+
+    DO l=1,SIZE(npts,2)
+       nlines = 0
+
+       DO m=1,SIZE(npts,1)
+          IF(npts(m,l)>0) THEN
+             nlines = nlines + npts(m,l)-1
+          END IF
+       END DO
+
+       WRITE(fid,'(A12)') '$ElementData'
+       WRITE(fid,'(I0)') 1
+       WRITE(fid,'(A17)') '"E"'
+       WRITE(fid,'(I0)') 0
+       WRITE(fid,'(I0)') 3
+       WRITE(fid,'(I0)') l-1
+       WRITE(fid,'(I0)') 1
+       WRITE(fid,'(I0)') nlines
+
+       DO m=1,SIZE(npts,1)
+          DO n=1,(npts(m,l)-1)
+             nlines2 = nlines2 + 1
+             WRITE(fid,*) mesh%nfaces + nlines2, ' ', e(n,m,l)
+          END DO
+       END DO
+       
+       WRITE(fid,'(A15)') '$EndElementData'
+    END DO
+
+
+    CLOSE(fid)
+  END SUBROUTINE save_stream_fields_msh
 END MODULE mesh

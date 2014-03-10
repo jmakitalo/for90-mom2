@@ -1,7 +1,8 @@
 #TARGETCPU=opteron
 OBJECTS=constants.o common.o linalg.o int.o mesh.o main.o green.o rwgf.o quad.o source.o \
 	time.o srcint.o bessel.o greenprd.o symmetry.o aux.o sysmat.o solver.o \
-	interface.o nfields.o diffr.o bc.o ffields.o cs.o nlsurf.o dipole.o nlbulk.o
+	interface.o nfields.o diffr.o bc.o ffields.o cs.o nlsurf.o dipole.o nlbulk.o \
+	nfpost.o
 COMPILER=ifort -fpp -openmp -parallel -diag-disable 8291 -O2 -vec-report1
 #COMPILER=ifort -diag-disable 8291 -vec-report1 -pg
 
@@ -66,7 +67,7 @@ bc.o: bc.f90 symmetry.f90 symmetry.o mesh.f90 mesh.o
 solver.o: solver.f90 sysmat.f90 sysmat.o source.f90 source.o bc.f90 bc.o time.f90 time.o
 	$(COMPILER) -c solver.f90
 
-interface.o: interface.f90 solver.f90 solver.o diffr.f90 diffr.o ffields.f90 ffields.o cs.f90 cs.o
+interface.o: interface.f90 solver.f90 solver.o diffr.f90 diffr.o ffields.f90 ffields.o cs.f90 cs.o nfpost.f90 nfpost.o
 	$(COMPILER) -c interface.f90
 
 nfields.o: nfields.f90 srcint.f90 srcint.o
@@ -89,6 +90,9 @@ nlbulk.o: nlbulk.f90 nfields.f90 nfields.o
 
 dipole.o: dipole.f90 srcint.f90 srcint.o nfields.f90 nfields.o
 	$(COMPILER) -c dipole.f90
+
+nfpost.o: nfpost.f90 nfields.f90 nfields.o source.f90 source.o
+	$(COMPILER) -c nfpost.f90
 
 clean:
 	rm *.o *.mod
