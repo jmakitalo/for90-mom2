@@ -13,17 +13,19 @@ MODULE diffr
   INTEGER, PARAMETER :: fresnel_nquad = 25
 
 CONTAINS
-  FUNCTION Gpff(r, rp, k, prd) RESULT(g)
+  FUNCTION Gpff(r, rp, k, prd, i, j) RESULT(g)
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r, rp
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
     COMPLEX (KIND=dp), INTENT(IN) :: k
+
+    ! Diffraction orders.
+    INTEGER, INTENT(IN) :: i, j
+
     COMPLEX (KIND=dp) :: g
 
-    INTEGER :: i, j
     REAL (KIND=dp), DIMENSION(2) :: kt
     COMPLEX (KIND=dp) :: kz, phasor
     REAL (KIND=dp) :: sgn, A
-    INTEGER, PARAMETER :: max_orders = 0
 
     IF(r(3)>rp(3)) THEN
        sgn = 1.0_dp
@@ -32,45 +34,42 @@ CONTAINS
     END IF
 
     g = 0.0_dp
-
-    DO i=-max_orders,max_orders
-       DO j=-max_orders,max_orders
           
-          ! Lattice vector.
-          kt = (/prd%coef(prd%cwl)%k0x + 2.0_dp*PI*(i/(prd%dx*prd%cp)&
-               - j*prd%sp/(prd%dy*prd%cp)) ,&
-               prd%coef(prd%cwl)%k0y + 2.0_dp*PI*j/prd%dy/)
-          
-          ! Skip evanescent waves.
-          IF(REAL(k**2,KIND=dp)<dotr(kt,kt)) THEN
-             CYCLE
-          END IF
-          
-          kz = SQRT(k**2 - dotr(kt,kt))
-
-          phasor = EXP((0,1)*dotr(kt,r(1:2)))*EXP(-(0,1)*dotr(kt,rp(1:2)))*&
-               EXP(sgn*(0,1)*kz*r(3))*EXP(-sgn*(0,1)*kz*rp(3))
-
-          g = g + phasor/kz
-       END DO
-    END DO
+    ! Lattice vector.
+    kt = (/prd%coef(prd%cwl)%k0x + 2.0_dp*PI*(i/(prd%dx*prd%cp)&
+         - j*prd%sp/(prd%dy*prd%cp)) ,&
+         prd%coef(prd%cwl)%k0y + 2.0_dp*PI*j/prd%dy/)
+    
+    ! Skip evanescent waves.
+    IF(REAL(k**2,KIND=dp)<dotr(kt,kt)) THEN
+       RETURN
+    END IF
+    
+    kz = SQRT(k**2 - dotr(kt,kt))
+    
+    phasor = EXP((0,1)*dotr(kt,r(1:2)))*EXP(-(0,1)*dotr(kt,rp(1:2)))*&
+         EXP(sgn*(0,1)*kz*r(3))*EXP(-sgn*(0,1)*kz*rp(3))
+    
+    g = phasor/kz
 
     A = prd%dx*prd%dy*prd%cp
 
     g = g*(0,1)/(2*A)
   END FUNCTION Gpff
 
-  FUNCTION gradGpff(r, rp, k, prd) RESULT(gg)
+  FUNCTION gradGpff(r, rp, k, prd, i, j) RESULT(gg)
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r, rp
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
     COMPLEX (KIND=dp), INTENT(IN) :: k
+
+    ! Diffraction orders.
+    INTEGER, INTENT(IN) :: i, j
+
     COMPLEX (KIND=dp), DIMENSION(3) :: gg
 
-    INTEGER :: i, j
     REAL (KIND=dp), DIMENSION(2) :: kt
     COMPLEX (KIND=dp) :: kz, phasor
     REAL (KIND=dp) :: sgn, A
-    INTEGER, PARAMETER :: max_orders = 0
 
     IF(r(3)>rp(3)) THEN
        sgn = 1.0_dp
@@ -79,41 +78,36 @@ CONTAINS
     END IF
 
     gg(:) = 0.0_dp
-
-    DO i=-max_orders,max_orders
-       DO j=-max_orders,max_orders
           
-          ! Lattice vector.
-          kt = (/prd%coef(prd%cwl)%k0x + 2.0_dp*PI*(i/(prd%dx*prd%cp)&
-               - j*prd%sp/(prd%dy*prd%cp)) ,&
-               prd%coef(prd%cwl)%k0y + 2.0_dp*PI*j/prd%dy/)
-          
-          ! Skip evanescent waves.
-          IF(REAL(k**2,KIND=dp)<dotr(kt,kt)) THEN
-             CYCLE
-          END IF
-          
-          kz = SQRT(k**2 - dotr(kt,kt))
-
-          phasor = EXP((0,1)*dotr(kt,r(1:2)))*EXP(-(0,1)*dotr(kt,rp(1:2)))*&
-               EXP(sgn*(0,1)*kz*r(3))*EXP(-sgn*(0,1)*kz*rp(3))
-
-          gg(1:2) = gg(1:2) + kt*phasor/kz
-          gg(3) = gg(3) + sgn*phasor
-       END DO
-    END DO
+    ! Lattice vector.
+    kt = (/prd%coef(prd%cwl)%k0x + 2.0_dp*PI*(i/(prd%dx*prd%cp)&
+         - j*prd%sp/(prd%dy*prd%cp)) ,&
+         prd%coef(prd%cwl)%k0y + 2.0_dp*PI*j/prd%dy/)
+    
+    ! Skip evanescent waves.
+    IF(REAL(k**2,KIND=dp)<dotr(kt,kt)) THEN
+       RETURN
+    END IF
+    
+    kz = SQRT(k**2 - dotr(kt,kt))
+    
+    phasor = EXP((0,1)*dotr(kt,r(1:2)))*EXP(-(0,1)*dotr(kt,rp(1:2)))*&
+         EXP(sgn*(0,1)*kz*r(3))*EXP(-sgn*(0,1)*kz*rp(3))
+    
+    gg(1:2) = kt*phasor/kz
+    gg(3) = sgn*phasor
 
     A = prd%dx*prd%dy*prd%cp
 
     gg(:) = gg(:)/(2*A)
   END FUNCTION gradGpff
 
-  SUBROUTINE diff_fields(mesh, ga, nf, x, nedgestot, omega, ri, prd, r, e, h)
+  SUBROUTINE diff_fields(mesh, ga, nf, x, nedgestot, omega, ri, prd, r, i, j, e, h)
     TYPE(mesh_container), INTENT(IN) :: mesh
     COMPLEX (KIND=dp), INTENT(IN) :: ri
     REAL (KIND=dp), INTENT(IN) :: omega
     TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
-    INTEGER, INTENT(IN) :: nf, nedgestot
+    INTEGER, INTENT(IN) :: nf, nedgestot, i, j
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
     COMPLEX (KIND=dp), DIMENSION(:), INTENT(IN) :: x
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r
@@ -145,8 +139,8 @@ CONTAINS
        END DO
 
        DO t=1,SIZE(qw)
-          g = Gpff(r, qpn(:,t), k, prd)
-          gg = gradGpff(r, qpn(:,t), k, prd)
+          g = Gpff(r, qpn(:,t), k, prd, i, j)
+          gg = gradGpff(r, qpn(:,t), k, prd, i, j)
 
           DO q=1,3
              edgeind = mesh%faces(n)%edge_indices(q)
@@ -163,14 +157,15 @@ CONTAINS
     END DO
   END SUBROUTINE diff_fields
 
-  FUNCTION diff_irradiance(mesh, ga, addsrc, src, x, nedgestot, omega, ri, ri_inc, prd) RESULT(irr)
+  FUNCTION diff_irradiance(mesh, ga, addsrc, src, x, nedgestot, omega, ri, ri_inc, prd, i, j)&
+       RESULT(irr)
     TYPE(mesh_container), INTENT(IN) :: mesh
     LOGICAL, INTENT(IN) :: addsrc
     TYPE(srcdata), INTENT(IN) :: src
     COMPLEX (KIND=dp), INTENT(IN) :: ri, ri_inc
     REAL (KIND=dp), INTENT(IN) :: omega
     TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
-    INTEGER, INTENT(IN) :: nedgestot
+    INTEGER, INTENT(IN) :: nedgestot, i, j
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
     COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: x
 
@@ -190,14 +185,24 @@ CONTAINS
     !dir = get_dir(pwtheta, pwphi)
 
     k = REAL(ri,KIND=dp)*omega/c0
-    kt = (/prd%coef(prd%cwl)%k0x, prd%coef(prd%cwl)%k0y/)
+
+    kt = (/prd%coef(prd%cwl)%k0x + 2.0_dp*PI*(i/(prd%dx*prd%cp)&
+         - j*prd%sp/(prd%dy*prd%cp)) ,&
+         prd%coef(prd%cwl)%k0y + 2.0_dp*PI*j/prd%dy/)
+
+    ! Skip evanescent waves.
+    IF(REAL(k**2,KIND=dp)<dotr(kt,kt)) THEN
+       irr = 0.0_dp
+       RETURN
+    END IF
+
     dir = (/kt(1), kt(2), -SQRT(k**2 - dotr(kt,kt))/)
 
     dir = dir/normr(dir)
 
-    CALL diff_fields(mesh, ga, nf, x(:,nf), nedgestot, omega, ri, prd, dir*eval_dist, e, h)
+    CALL diff_fields(mesh, ga, nf, x(:,nf), nedgestot, omega, ri, prd, dir*eval_dist, i, j, e, h)
 
-    IF(addsrc) THEN
+    IF(addsrc .AND. i==0 .AND. j==0) THEN
        CALL src_fields(src, omega, ri, dir*eval_dist, einc, hinc)
        
        e = e + einc

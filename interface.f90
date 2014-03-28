@@ -419,6 +419,20 @@ CONTAINS
     WRITE(*,'(A,I0,A)') ' Allocated ', n, ' sources.'
   END SUBROUTINE read_nsrc
 
+  SUBROUTINE read_osrc(line, b)
+    CHARACTER (LEN=*), INTENT(IN) :: line
+    TYPE(batch), INTENT(INOUT) :: b
+    INTEGER :: n
+    REAL (KIND=dp), DIMENSION(3) :: pos
+
+    READ(line,*) n, pos(1:3)
+
+    b%src(n)%pos = pos
+
+    WRITE(*,*) 'Offset source ', n, ' by ', pos
+    
+  END SUBROUTINE read_osrc
+
   SUBROUTINE read_ssrc(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
@@ -505,15 +519,16 @@ CONTAINS
   SUBROUTINE read_diff(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
-    INTEGER :: fid=10, iovar, n, dindex
+    INTEGER :: fid=10, iovar, n, dindex, orderx, ordery, srcindex
     REAL (KIND=dp) :: wl, omega
     REAL (KIND=dp), DIMENSION(b%nwl) :: irr
     COMPLEX (KIND=dp) :: ri, ri_inc
     TYPE(prdnfo), POINTER :: prd
+    CHARACTER (LEN=256) :: oname, numstr
 
-    READ(line,*) dindex
+    READ(line,*) srcindex, dindex, orderx, ordery
 
-    WRITE(*,*) 'Computing diffracted irradiance'
+    WRITE(*,'(A,I0,A,I0,A)') 'Computing diffracted irradiance to order (', orderx, ',', ordery, ')'
 
     DO n=1,b%nwl
        wl = b%sols(n)%wl
@@ -526,13 +541,21 @@ CONTAINS
 
        prd%cwl = find_closest(wl, prd%coef(:)%wl)
 
-       irr(n) = diff_irradiance(b%domains(dindex)%mesh, b%ga, dindex==1, b%src(1), b%sols(n)%x(:,:,1),&
-            b%mesh%nedges, omega, ri, ri_inc, prd)
+       irr(n) = diff_irradiance(b%domains(dindex)%mesh, b%ga, dindex==1, b%src(srcindex),&
+            b%sols(n)%x(:,:,srcindex), b%mesh%nedges, omega, ri, ri_inc, prd, orderx, ordery)
 
        WRITE(*,'(A,I0,A,I0,:)') ' Wavelength ',  n, ' of ', b%nwl
     END DO
 
-    OPEN(fid, FILE=(TRIM(b%name) // '.dif'), ACTION='WRITE', IOSTAT=iovar)
+    IF(orderx==0 .AND. ordery==0) THEN
+       WRITE(numstr, '(A,I0)') '-s', srcindex
+    ELSE
+       WRITE(numstr, '(A,I0,A,I0,I0)') '-s', srcindex, '-o', orderx, ordery
+    END IF
+
+    oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '.dif'
+
+    OPEN(fid, FILE=oname, ACTION='WRITE', IOSTAT=iovar)
     IF(iovar>0) THEN
        WRITE(*,*) 'Could not open output file for diffraction data!'
        STOP
@@ -559,13 +582,15 @@ CONTAINS
           
           prd%cwl = find_closest(wl, prd%coef(:)%wl)
           
-          irr(n) = diff_irradiance(b%domains(dindex)%mesh, b%ga, .FALSE., b%src(1), b%sols(n)%nlx(:,:,1),&
-               b%mesh%nedges, omega, ri, ri_inc, prd)
+          irr(n) = diff_irradiance(b%domains(dindex)%mesh, b%ga, .FALSE., b%src(srcindex),&
+               b%sols(n)%nlx(:,:,srcindex), b%mesh%nedges, omega, ri, ri_inc, prd, orderx, ordery)
           
           WRITE(*,'(A,I0,A,I0,:)') ' Wavelength ',  n, ' of ', b%nwl
        END DO
 
-       OPEN(fid, FILE=(TRIM(b%name) // '-sh.dif'), ACTION='WRITE', IOSTAT=iovar)
+       oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-sh.dif'
+
+       OPEN(fid, FILE=oname, ACTION='WRITE', IOSTAT=iovar)
        IF(iovar>0) THEN
           WRITE(*,*) 'Could not open output file for diffraction data!'
           STOP
@@ -650,6 +675,9 @@ CONTAINS
     CALL field_mesh(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
          b%sols(wlindex)%x(:,:,srcindex), b%ga, omega, ri)
 
+    !CALL gradPnls_mesh('gradPnls.msh', b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
+    !     b%sols(wlindex)%x(:,:,srcindex), b%ga, omega, ri)
+
     IF(ALLOCATED(b%sols(wlindex)%nlx)) THEN
        oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-sh.msh'
        
@@ -660,6 +688,47 @@ CONTAINS
 
     END IF
   END SUBROUTINE read_nfms
+
+  SUBROUTINE read_nfem(line, b)
+    CHARACTER (LEN=*), INTENT(IN) :: line
+    TYPE(batch), INTENT(INOUT) :: b
+    TYPE(nfield_plane) :: nfplane
+    INTEGER :: wlindex, srcindex, dindex
+    CHARACTER (LEN=256) :: oname, numstr, addsrcstr, meshname
+    REAL (KIND=dp) :: omega
+    COMPLEX (KIND=dp) :: ri
+    TYPE(mesh_container) :: extmesh
+    LOGICAL :: addsrc
+    TYPE(prdnfo), POINTER :: prd
+
+    READ(line,*) wlindex, srcindex, dindex, meshname, addsrcstr
+
+    extmesh = load_mesh(meshname)
+
+    CALL scale_mesh(extmesh, b%scale)
+    CALL compute_mesh_essentials(extmesh)
+
+    addsrc = (TRIM(addsrcstr)=='true')
+
+    WRITE(numstr, '(A,I0,A,I0,A,I0)') '-wl', wlindex, '-s', srcindex, '-d', dindex
+    oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '.msh'
+
+    omega = 2.0_dp*pi*c0/b%sols(wlindex)%wl
+    ri = b%media(b%domains(dindex)%medium_index)%prop(wlindex)%ri
+
+    IF(b%domains(dindex)%gf_index>0) THEN
+       prd => b%prd(b%domains(dindex)%gf_index)
+       prd%cwl = find_closest(b%sols(wlindex)%wl, prd%coef(:)%wl)
+    ELSE
+       prd => NULL()
+    END IF
+
+    CALL field_external_mesh(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
+         b%sols(wlindex)%x(:,:,srcindex), b%ga, omega, ri, prd,&
+         addsrc, b%src(srcindex), extmesh)
+
+    CALL delete_mesh(extmesh)
+  END SUBROUTINE read_nfem
 
   SUBROUTINE read_nfdm(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
@@ -817,38 +886,38 @@ CONTAINS
   SUBROUTINE read_rcst(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
-    INTEGER :: iovar, ntheta_rcs, nphi_rcs, wlindex
+    INTEGER :: iovar, ntheta_rcs, nphi_rcs, wlindex, srcindex
     REAL (KIND=dp) :: omega
     COMPLEX (KIND=dp) :: ri
     REAL (KIND=dp), DIMENSION(:,:), ALLOCATABLE :: rcsdata
     CHARACTER (LEN=256) :: oname, numstr
 
-    READ(line,*) wlindex, ntheta_rcs, nphi_rcs
+    READ(line,*) wlindex, srcindex, ntheta_rcs, nphi_rcs
 
     WRITE(*,*) 'Computing radar cross-sections'
     CALL timer_start()
 
     ALLOCATE(rcsdata(1:ntheta_rcs,1:nphi_rcs))
 
-    WRITE(numstr, '(I0)') wlindex
-    oname = TRIM(b%name) // '-wl' // TRIM(ADJUSTL(numstr)) // '.rcs'
+    WRITE(numstr, '(A,I0,A,I0)') '-wl', wlindex, '-s', srcindex
+    oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '.rcs'
 
     omega = 2.0_dp*pi*c0/b%sols(wlindex)%wl
     ri = b%media(b%domains(1)%medium_index)%prop(wlindex)%ri
 
-    CALL rcs(b%domains(1)%mesh, b%mesh%nedges, omega, ri, b%ga, b%sols(wlindex)%x(:,:,1),&
+    CALL rcs(b%domains(1)%mesh, b%mesh%nedges, omega, ri, b%ga, b%sols(wlindex)%x(:,:,srcindex),&
          ntheta_rcs, nphi_rcs, rcsdata)
     CALL write_data(oname, rcsdata)
 
     ! Nonlinear radar cross-sections.
     IF(ALLOCATED(b%sols(wlindex)%nlx)) THEN
-       oname = TRIM(b%name) // '-wl' // TRIM(ADJUSTL(numstr)) // '-sh.rcs'
+       oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-sh.rcs'
        
        ! Second-harmonic frequency.
        ri = b%media(b%domains(1)%medium_index)%prop(wlindex)%shri
        
-       CALL rcs(b%domains(1)%mesh, b%mesh%nedges, 2.0_dp*omega, ri, b%ga, b%sols(wlindex)%nlx(:,:,1),&
-            ntheta_rcs, nphi_rcs, rcsdata)
+       CALL rcs(b%domains(1)%mesh, b%mesh%nedges, 2.0_dp*omega, ri, b%ga,&
+            b%sols(wlindex)%nlx(:,:,srcindex), ntheta_rcs, nphi_rcs, rcsdata)
        CALL write_data(oname, rcsdata)
 
     END IF
@@ -1035,6 +1104,8 @@ CONTAINS
           CALL read_nsrc(line, b)
        ELSE IF(scmd=='ssrc') THEN
           CALL read_ssrc(line, b)
+       ELSE IF(scmd=='osrc') THEN
+          CALL read_osrc(line, b)
        ELSE IF(scmd=='solv') THEN
           CALL solve_batch(b)
        ELSE IF(scmd=='npgf') THEN
@@ -1053,6 +1124,8 @@ CONTAINS
           CALL read_nfms(line, b)
        ELSE IF(scmd=='nfdm') THEN
           CALL read_nfdm(line, b)
+       ELSE IF(scmd=='nfem') THEN
+          CALL read_nfem(line, b)
        ELSE IF(scmd=='nfst') THEN
           CALL read_nfst(line, b)
        ELSE IF(scmd=='rcst') THEN

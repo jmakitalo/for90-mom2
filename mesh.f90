@@ -1760,6 +1760,40 @@ CONTAINS
        WRITE(fid,'(A15)') '$EndElementData'
     END DO
 
+    DO l=1,nsteps
+       WRITE(fid,'(A12)') '$ElementData'
+       WRITE(fid,'(I0)') 1
+       WRITE(fid,'(A17)') '"|Re(E)|"'
+       WRITE(fid,'(I0)') 0
+       WRITE(fid,'(I0)') 3
+       WRITE(fid,'(I0)') l-1
+       WRITE(fid,'(I0)') 1
+       WRITE(fid,'(I0)') mesh%nfaces
+
+       DO n=1,mesh%nfaces
+          WRITE(fid,*) n, ' ', normr(REAL(REAL(e(:,n)*EXP(-(0,1)*2*pi*REAL(l)/nsteps)),KIND=dp))
+       END DO
+       
+       WRITE(fid,'(A15)') '$EndElementData'
+    END DO
+
+    DO l=1,nsteps
+       WRITE(fid,'(A12)') '$ElementData'
+       WRITE(fid,'(I0)') 1
+       WRITE(fid,'(A17)') '"|Re(H)|"'
+       WRITE(fid,'(I0)') 0
+       WRITE(fid,'(I0)') 3
+       WRITE(fid,'(I0)') l-1
+       WRITE(fid,'(I0)') 1
+       WRITE(fid,'(I0)') mesh%nfaces
+
+       DO n=1,mesh%nfaces
+          WRITE(fid,*) n, ' ', normr(REAL(REAL(h(:,n)*EXP(-(0,1)*2*pi*REAL(l)/nsteps)),KIND=dp))
+       END DO
+       
+       WRITE(fid,'(A15)') '$EndElementData'
+    END DO
+
     CLOSE(fid)
 
   END SUBROUTINE save_vector_fields_msh

@@ -187,6 +187,10 @@ CONTAINS
                         epsp(1:b%domains(m)%mesh%nfaces), b%sols(n)%x(:,:,l), b%ga, nf, mprop%nls,&
                         src_coef(1:(2*nind),m,nf,l), src_vec(1:(2*nind)))
 
+                   !CALL nlsurf_srcvec(b%domains(m)%mesh, b%mesh%nedges, omega, mprop%ri, mprop%shri,&
+                   !     epsp(1:b%domains(m)%mesh%nfaces), b%sols(n)%x(:,:,l), b%ga, nf, mprop%nls,&
+                   !     src_vec(1:(2*nind)))
+
                    ! Place the source vector elements to proper places by the use of
                    ! the edge index mappings.
                    b%sols(n)%nlx(ind(1:nind),nf,l) = b%sols(n)%nlx(ind(1:nind),nf,l) + src_vec(1:nind)
