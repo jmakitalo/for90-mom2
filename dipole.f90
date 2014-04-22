@@ -10,7 +10,7 @@ MODULE dipole
   IMPLICIT NONE
 
 CONTAINS
-  SUBROUTINE srcvec_dipole(mesh, nedgestot, omega, ri, ga, dpos, dmom, q)
+  SUBROUTINE srcvec_dipole(mesh, nedgestot, omega, ri, ga, dpos, dmom, qd, q)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, INTENT(IN) :: nedgestot
     COMPLEX (KIND=dp), INTENT(IN) :: ri
@@ -18,6 +18,7 @@ CONTAINS
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: dpos
     COMPLEX (KIND=dp), DIMENSION(3), INTENT(IN) :: dmom
     REAL (KIND=dp), INTENT(IN) :: omega
+    TYPE(quad_data), INTENT(IN) :: qd
 
     COMPLEX (KIND=dp), DIMENSION(:,:) :: q
 
@@ -40,8 +41,8 @@ CONTAINS
     ns = 1
 
     DO m=1,mesh%nfaces
-       int1 = intK2(dpos, m, mesh, k, ga(ns), prd, .TRUE.)
-       int2 = intK3(dpos, m, mesh, k, ga(ns), prd, .TRUE.)
+       int1 = intK2(dpos, m, mesh, k, ga(ns), prd, .TRUE., qd)
+       int2 = intK3(dpos, m, mesh, k, ga(ns), prd, .TRUE., qd)
 
        DO p=1,3
           index = mesh%faces(m)%edge_indices(p)
@@ -52,7 +53,7 @@ CONTAINS
     END DO
 
     DO m=1,mesh%nfaces
-       int1 = intK4(dpos, m, mesh, k, ga(ns), -1, prd, .TRUE.)
+       int1 = intK4(dpos, m, mesh, k, ga(ns), -1, prd, .TRUE., qd)
 
        DO p=1,3
           index = mesh%faces(m)%edge_indices(p)
@@ -88,7 +89,7 @@ CONTAINS
   ! Computes the polarizability alpha of a particle. The dipole moment p
   ! is given by p = epsilon0*alpha*Einc, where Einc is the incident field at the location
   ! of the dipole. It is assumed that Einc = 1.
-  FUNCTION polarizability(mesh, ga, x, nedgestot, omega, ri, prd, a) RESULT(alpha)
+  FUNCTION polarizability(mesh, ga, x, nedgestot, omega, ri, prd, a, qd) RESULT(alpha)
     TYPE(mesh_container), INTENT(IN) :: mesh
     COMPLEX (KIND=dp), INTENT(IN) :: ri
     REAL (KIND=dp), INTENT(IN) :: omega, a
@@ -96,6 +97,7 @@ CONTAINS
     TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
     COMPLEX (KIND=dp), DIMENSION(:,:,:), INTENT(IN) :: x
+    TYPE(quad_data), INTENT(IN) :: qd
 
     COMPLEX (KIND=dp), DIMENSION(3) :: alpha
     INTEGER, PARAMETER :: ntheta = 80
@@ -142,7 +144,7 @@ CONTAINS
              END IF
 
              CALL scat_fields(mesh, ga, x, nedgestot, omega, ri, prd,&
-                  MATMUL(map, r), e, h)
+                  MATMUL(map, r), qd, e, h)
 
              ! Map the evaluated fields.
              e = MATMUL(CMPLX(TRANSPOSE(map),KIND=dp), e)

@@ -14,6 +14,20 @@ MODULE interface
   IMPLICIT NONE
 
 CONTAINS
+  SUBROUTINE read_quad(line, b)
+    CHARACTER (LEN=*), INTENT(IN) :: line
+    TYPE(batch), INTENT(INOUT) :: b
+    CHARACTER (LEN=256) :: tri_name, tetra_name
+
+    READ(line,*) tri_name, tetra_name
+
+    CALL delete_quad_data(b%qd_tri)
+    CALL delete_quad_data(b%qd_tetra)
+
+    b%qd_tri = tri_quad_data(TRIM(tri_name))
+    b%qd_tetra = tetra_quad_data(TRIM(tetra_name))
+  END SUBROUTINE read_quad
+
   SUBROUTINE read_ndom(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
@@ -520,15 +534,26 @@ CONTAINS
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
     INTEGER :: fid=10, iovar, n, dindex, orderx, ordery, srcindex
-    REAL (KIND=dp) :: wl, omega
+    REAL (KIND=dp) :: wl, omega, polangle
     REAL (KIND=dp), DIMENSION(b%nwl) :: irr
     COMPLEX (KIND=dp) :: ri, ri_inc
     TYPE(prdnfo), POINTER :: prd
-    CHARACTER (LEN=256) :: oname, numstr
+    CHARACTER (LEN=256) :: oname, numstr, polstr
+    LOGICAL :: polarize
 
-    READ(line,*) srcindex, dindex, orderx, ordery
+    READ(line,*) srcindex, dindex, orderx, ordery, polstr, polangle
 
     WRITE(*,'(A,I0,A,I0,A)') 'Computing diffracted irradiance to order (', orderx, ',', ordery, ')'
+
+    IF(TRIM(polstr)=='true') THEN
+       polarize = .TRUE.
+       WRITE(*,*) 'Using a polarizer at angle', polangle, ' deg'
+    ELSE
+       polarize = .FALSE.
+    END IF
+
+    ! Transform from degrees to radians.
+    polangle = polangle*pi/180
 
     DO n=1,b%nwl
        wl = b%sols(n)%wl
@@ -542,7 +567,8 @@ CONTAINS
        prd%cwl = find_closest(wl, prd%coef(:)%wl)
 
        irr(n) = diff_irradiance(b%domains(dindex)%mesh, b%ga, dindex==1, b%src(srcindex),&
-            b%sols(n)%x(:,:,srcindex), b%mesh%nedges, omega, ri, ri_inc, prd, orderx, ordery)
+            b%sols(n)%x(:,:,srcindex), b%mesh%nedges, omega, ri, ri_inc, prd,&
+            orderx, ordery, b%qd_tri, polarize, polangle)
 
        WRITE(*,'(A,I0,A,I0,:)') ' Wavelength ',  n, ' of ', b%nwl
     END DO
@@ -583,7 +609,8 @@ CONTAINS
           prd%cwl = find_closest(wl, prd%coef(:)%wl)
           
           irr(n) = diff_irradiance(b%domains(dindex)%mesh, b%ga, .FALSE., b%src(srcindex),&
-               b%sols(n)%nlx(:,:,srcindex), b%mesh%nedges, omega, ri, ri_inc, prd, orderx, ordery)
+               b%sols(n)%nlx(:,:,srcindex), b%mesh%nedges, omega, ri, ri_inc, prd,&
+               orderx, ordery, b%qd_tri, polarize, polangle)
           
           WRITE(*,'(A,I0,A,I0,:)') ' Wavelength ',  n, ' of ', b%nwl
        END DO
@@ -640,14 +667,14 @@ CONTAINS
        prd%cwl = find_closest(wl, prd%coef(:)%wl)
 
        data(n,2) = transmittance(b%domains(dindexT)%mesh, b%ga, addsrc, b%src(1),&
-            b%sols(n)%x, b%mesh%nedges, omega, ri, ri_inc, prd, z0T, -1.0_dp)
+            b%sols(n)%x, b%mesh%nedges, omega, ri, ri_inc, prd, z0T, -1.0_dp, b%qd_tri)
 
        ri = b%media(b%domains(dindexR)%medium_index)%prop(n)%ri
        prd => b%prd(b%domains(dindexR)%gf_index)
        prd%cwl = find_closest(wl, prd%coef(:)%wl)
 
        data(n,3) = transmittance(b%domains(dindexR)%mesh, b%ga, .FALSE., b%src(1),&
-            b%sols(n)%x, b%mesh%nedges, omega, ri, ri_inc, prd, z0R, 1.0_dp)
+            b%sols(n)%x, b%mesh%nedges, omega, ri, ri_inc, prd, z0R, 1.0_dp, b%qd_tri)
 
        WRITE(*,'(A,I0,A,I0,:)') ' Wavelength ',  n, ' of ', b%nwl
     END DO
@@ -693,13 +720,15 @@ CONTAINS
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
     TYPE(nfield_plane) :: nfplane
-    INTEGER :: wlindex, srcindex, dindex
+    INTEGER :: wlindex, srcindex, dindex, nind
     CHARACTER (LEN=256) :: oname, numstr, addsrcstr, meshname
     REAL (KIND=dp) :: omega
     COMPLEX (KIND=dp) :: ri
     TYPE(mesh_container) :: extmesh
     LOGICAL :: addsrc
     TYPE(prdnfo), POINTER :: prd
+    COMPLEX (KIND=dp), DIMENSION(:,:,:), ALLOCATABLE :: nlx
+    INTEGER, DIMENSION(b%mesh%nedges) :: ind
 
     READ(line,*) wlindex, srcindex, dindex, meshname, addsrcstr
 
@@ -725,7 +754,46 @@ CONTAINS
 
     CALL field_external_mesh(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
          b%sols(wlindex)%x(:,:,srcindex), b%ga, omega, ri, prd,&
-         addsrc, b%src(srcindex), extmesh)
+         addsrc, b%src(srcindex), extmesh, b%qd_tri)
+
+    IF(ALLOCATED(b%sols(wlindex)%nlx)) THEN
+       oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-sh.msh'
+       
+       ri = b%media(b%domains(dindex)%medium_index)%prop(wlindex)%shri
+
+       IF(b%domains(dindex)%gf_index>0) THEN
+          prd => b%prd(b%domains(dindex)%gf_index)
+          prd%cwl = find_closest(b%sols(wlindex)%wl*0.5_dp, prd%coef(:)%wl)
+       ELSE
+          prd => NULL()
+       END IF
+
+       ALLOCATE(nlx(SIZE(b%sols(wlindex)%nlx,1), SIZE(b%sols(wlindex)%nlx,2),&
+            SIZE(b%sols(wlindex)%nlx,3)))
+
+       nlx(:,:,:) = 0.0_dp
+
+       IF(b%media(b%domains(dindex)%medium_index)%type==mtype_nls) THEN
+          ! Get mapping from local edge indices of domain dindex to global
+          ! edge indices, which correspond to solution coefficient indices.
+          nind = b%domains(dindex)%mesh%nedges
+          ind(1:nind) = b%domains(dindex)%mesh%edges(:)%parent_index
+
+          nlx(ind(1:nind),:,:) = b%sols(wlindex)%src_coef((nind+1):(2*nind),dindex,:,:)&
+               + b%sols(wlindex)%nlx(ind(1:nind),:,:)
+
+          nlx(ind(1:nind)+b%mesh%nedges,:,:) = b%sols(wlindex)%src_coef(1:nind,dindex,:,:)&
+               + b%sols(wlindex)%nlx(ind(1:nind)+b%mesh%nedges,:,:)
+       ELSE
+          nlx(:,:,:) = b%sols(wlindex)%nlx(:,:,:)
+       END IF
+       
+       CALL field_external_mesh(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
+            nlx(:,:,srcindex), b%ga, 2.0_dp*omega, ri, prd,&
+            .FALSE., b%src(srcindex), extmesh, b%qd_tri)
+
+       DEALLOCATE(nlx)
+    END IF
 
     CALL delete_mesh(extmesh)
   END SUBROUTINE read_nfem
@@ -762,7 +830,7 @@ CONTAINS
     
     CALL field_domain(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
          b%sols(wlindex)%x(:,:,srcindex), b%ga, omega, ri, prd, b%src(srcindex), addsrc,&
-         origin, dsize, npoints)
+         origin, dsize, npoints, b%qd_tri)
 
     IF(ALLOCATED(b%sols(wlindex)%nlx)) THEN
        oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-sh.msh'
@@ -775,7 +843,7 @@ CONTAINS
        
        CALL field_domain(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
             b%sols(wlindex)%nlx(:,:,srcindex), b%ga, 2.0_dp*omega, ri, prd, b%src(srcindex), .FALSE.,&
-            origin, dsize, npoints)
+            origin, dsize, npoints, b%qd_tri)
     END IF
   END SUBROUTINE read_nfdm
 
@@ -812,7 +880,7 @@ CONTAINS
     END IF
 
     CALL field_stream(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
-         b%sols(wlindex)%x(:,:,srcindex), b%ga, omega, ri, prd, b%src(srcindex), addsrc)
+         b%sols(wlindex)%x(:,:,srcindex), b%ga, omega, ri, prd, b%src(srcindex), addsrc, b%qd_tri)
   END SUBROUTINE read_nfst
 
   ! Computes a 2D image, where pixels correspond to source positions.
@@ -846,7 +914,7 @@ CONTAINS
        theta_max = ASIN(b%src(n)%napr)
 
        CALL rcs_solangle(b%domains(1)%mesh, b%mesh%nedges, omega, ri, b%ga,&
-            b%sols(wlindex)%x(:,:,n), theta_max, scatp(n))
+            b%sols(wlindex)%x(:,:,n), theta_max, b%qd_tri, scatp(n))
     END DO
     !$OMP END DO
     !$OMP END PARALLEL
@@ -870,7 +938,7 @@ CONTAINS
           theta_max = ASIN(b%src(n)%napr)
 
           CALL rcs_solangle(b%domains(1)%mesh, b%mesh%nedges, 2.0_dp*omega, ri, b%ga,&
-               b%sols(wlindex)%nlx(:,:,n), theta_max, scatp(n))
+               b%sols(wlindex)%nlx(:,:,n), theta_max, b%qd_tri, scatp(n))
        END DO
        !$OMP END DO
        !$OMP END PARALLEL
@@ -906,7 +974,7 @@ CONTAINS
     ri = b%media(b%domains(1)%medium_index)%prop(wlindex)%ri
 
     CALL rcs(b%domains(1)%mesh, b%mesh%nedges, omega, ri, b%ga, b%sols(wlindex)%x(:,:,srcindex),&
-         ntheta_rcs, nphi_rcs, rcsdata)
+         ntheta_rcs, nphi_rcs, b%qd_tri, rcsdata)
     CALL write_data(oname, rcsdata)
 
     ! Nonlinear radar cross-sections.
@@ -917,7 +985,7 @@ CONTAINS
        ri = b%media(b%domains(1)%medium_index)%prop(wlindex)%shri
        
        CALL rcs(b%domains(1)%mesh, b%mesh%nedges, 2.0_dp*omega, ri, b%ga,&
-            b%sols(wlindex)%nlx(:,:,srcindex), ntheta_rcs, nphi_rcs, rcsdata)
+            b%sols(wlindex)%nlx(:,:,srcindex), ntheta_rcs, nphi_rcs, b%qd_tri, rcsdata)
        CALL write_data(oname, rcsdata)
 
     END IF
@@ -959,7 +1027,7 @@ CONTAINS
        !END IF
 
        alpha = polarizability(b%domains(1)%mesh, b%ga, b%sols(n)%x,&
-            b%mesh%nedges, omega, ri, prd, a)
+            b%mesh%nedges, omega, ri, prd, a, b%qd_tri)
 
        data(n,1) = b%sols(n)%wl
        data(n,2) = REAL(alpha(1),KIND=dp)
@@ -999,7 +1067,7 @@ CONTAINS
        ri = b%media(b%domains(1)%medium_index)%prop(n)%ri
 
        CALL cs_prtsrf(b%domains(1)%mesh, b%mesh%nedges, omega, ri, b%ga,&
-            b%sols(n)%x(:,:,1), b%src(1), csca, cabs)
+            b%sols(n)%x(:,:,1), b%src(1), b%qd_tri, csca, cabs)
 
        data(n,1) = wl
        data(n,2) = csca
@@ -1027,7 +1095,7 @@ CONTAINS
           ri = b%media(b%domains(1)%medium_index)%prop(n)%shri
           
           CALL cs_prtsrf(b%domains(1)%mesh, b%mesh%nedges, 2.0_dp*omega, ri, b%ga,&
-               b%sols(n)%nlx(:,:,1), nlsrc, csca, cabs)
+               b%sols(n)%nlx(:,:,1), nlsrc, b%qd_tri, csca, cabs)
           
           data(n,1) = wl
           data(n,2) = csca
@@ -1041,6 +1109,70 @@ CONTAINS
        CALL write_data(TRIM(b%name) // '-sh.crs', data)
     END IF
   END SUBROUTINE read_crst
+
+  SUBROUTINE read_csca(line, b)
+    CHARACTER (LEN=*), INTENT(IN) :: line
+    TYPE(batch), INTENT(INOUT) :: b
+    INTEGER :: fid=10, iovar, n
+    REAL (KIND=dp) :: csca, cabs, wl
+    REAL (KIND=dp), DIMENSION(b%nwl,2) :: data
+    REAL (KIND=dp) :: omega
+    COMPLEX (KIND=dp) :: ri
+    TYPE(srcdata) :: nlsrc
+
+    WRITE(*,*) 'Computing scattering cross-section'
+
+    !$OMP PARALLEL DEFAULT(NONE)&
+    !$OMP SHARED(b,data)&
+    !$OMP PRIVATE(n,omega,ri,wl,csca)
+    !$OMP DO SCHEDULE(STATIC)
+    DO n=1,b%nwl
+       wl = b%sols(n)%wl
+
+       omega = 2.0_dp*pi*c0/wl
+       ri = b%media(b%domains(1)%medium_index)%prop(n)%ri
+
+       CALL csca_ff(b%domains(1)%mesh, b%mesh%nedges, omega, ri, b%ga,&
+            b%sols(n)%x(:,:,1), b%qd_tri, csca)
+
+       data(n,1) = wl
+       data(n,2) = csca
+
+       WRITE(*,'(A,I0,A,I0,:)') ' Wavelength ',  n, ' of ', b%nwl
+    END DO
+    !$OMP END DO
+    !$OMP END PARALLEL
+
+    CALL write_data(TRIM(b%name) // '.crs', data)
+
+    ! Second-harmonic.
+    IF(ALLOCATED(b%sols(1)%nlx)) THEN
+       nlsrc%type = 0
+
+       !$OMP PARALLEL DEFAULT(NONE)&
+       !$OMP SHARED(b,data)&
+       !$OMP PRIVATE(n,omega,ri,wl,csca)
+       !$OMP DO SCHEDULE(STATIC)
+       DO n=1,b%nwl
+          wl = b%sols(n)%wl
+          
+          omega = 2.0_dp*pi*c0/wl
+          ri = b%media(b%domains(1)%medium_index)%prop(n)%shri
+          
+          CALL csca_ff(b%domains(1)%mesh, b%mesh%nedges, 2.0_dp*omega, ri, b%ga,&
+               b%sols(n)%nlx(:,:,1), b%qd_tri, csca)
+          
+          data(n,1) = wl
+          data(n,2) = csca
+          
+          WRITE(*,'(A,I0,A,I0,:)') ' Wavelength ',  n, ' of ', b%nwl
+       END DO
+       !$OMP END DO
+       !$OMP END PARALLEL
+       
+       CALL write_data(TRIM(b%name) // '-sh.crs', data)
+    END IF
+  END SUBROUTINE read_csca
 
   SUBROUTINE test()
     COMPLEX (KIND=dp) :: res
@@ -1142,6 +1274,10 @@ CONTAINS
           CALL read_scan_source(line, b)
        ELSE IF(scmd=='trns') THEN
           CALL read_trns(line, b)
+       ELSE IF(scmd=='quad') THEN
+          CALL read_quad(line, b)
+       ELSE IF(scmd=='csca') THEN
+          CALL read_csca(line, b)
        ELSE
           WRITE(*,*) 'Unrecognized command ', scmd, '!'
        END IF

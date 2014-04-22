@@ -11,7 +11,7 @@ MODULE nlbulk
 
 CONTAINS
   ! Computes the action on nonlinear bulk dipole polarization Pnlb.
-  FUNCTION Pnlb_dipole_ga(mesh, nedgestot, omegaff, ri, x, ga, nlb, r) RESULT(Pnlb)
+  FUNCTION Pnlb_dipole_ga(mesh, nedgestot, omegaff, ri, x, ga, nlb, r, qd) RESULT(Pnlb)
     TYPE(mesh_container), INTENT(IN) :: mesh
     REAL (KIND=dp), INTENT(IN) :: omegaff
     COMPLEX (KIND=dp), INTENT(IN) :: ri
@@ -20,12 +20,13 @@ CONTAINS
     INTEGER, INTENT(IN) :: nedgestot
     TYPE(medium_nlb), INTENT(IN) :: nlb
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r
+    TYPE(quad_data), INTENT(IN) :: qd
 
     COMPLEX (KIND=dp), DIMENSION(3,SIZE(ga),SIZE(x,3)) :: Pnlb, e, h
     COMPLEX (KIND=dp) :: Pnlbz
     INTEGER :: na, ns
 
-    CALL scat_fields_ga(mesh, ga, x, nedgestot, omegaff, ri, NULL(), r, e, h)
+    CALL scat_fields_ga(mesh, ga, x, nedgestot, omegaff, ri, NULL(), r, qd, e, h)
 
     DO na=1,SIZE(ga)
        DO ns=1,SIZE(x,3)
@@ -38,7 +39,8 @@ CONTAINS
 
   ! Computes the excitation vector for a second-order dipolar bulk source for
   ! all group representations.
-  SUBROUTINE srcvec_nlbulk_dipole(mesh, nedgestot, omegaff, riff, rish, xff, ga, nlb, src)
+  SUBROUTINE srcvec_nlbulk_dipole(mesh, nedgestot, omegaff, riff, rish, xff, ga, nlb,&
+       qd_tri, qd_tetra, src)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, INTENT(IN) :: nedgestot
     REAL (KIND=dp), INTENT(IN) :: omegaff
@@ -46,22 +48,23 @@ CONTAINS
     COMPLEX (KIND=dp), DIMENSION(:,:,:), INTENT(IN) :: xff
     TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
     TYPE(medium_nlb), INTENT(IN) :: nlb
+    TYPE(quad_data), INTENT(IN) :: qd_tri, qd_tetra
 
     COMPLEX (KIND=dp), DIMENSION(:,:,:), INTENT(INOUT) :: src
 
     REAL (KIND=dp) :: omegash, vol, thresholdsq
-    COMPLEX (KIND=dp), DIMENSION(3,SIZE(volQw),SIZE(ga),SIZE(xff,3)) :: Jb
+    COMPLEX (KIND=dp), DIMENSION(3,qd_tetra%num_nodes,SIZE(ga),SIZE(xff,3)) :: Jb
     COMPLEX (KIND=dp), DIMENSION(3) :: jacJb
     REAL (KIND=dp), DIMENSION(3) ::rp, diff
     COMPLEX (KIND=dp) :: int1, int2, int3, c1, c2, k, cgae
     INTEGER :: nedges, nweights, m, n, p, q, t, na, na2, nr, index, ns, progress
-    REAL (KIND=dp), DIMENSION(3,SIZE(volQw)) :: qp
-    COMPLEX (KIND=dp), DIMENSION(3,3,SIZE(volQw),mesh%nfaces,SIZE(ga),SIZE(ga)) :: intaux1,&
+    REAL (KIND=dp), DIMENSION(3,qd_tetra%num_nodes) :: qp
+    COMPLEX (KIND=dp), DIMENSION(3,3,qd_tetra%num_nodes,mesh%nfaces,SIZE(ga),SIZE(ga)) :: intaux1,&
          intaux2, intaux3
     LOGICAL :: near
 
     nedges = mesh%nedges
-    nweights = SIZE(volQw)
+    nweights = qd_tetra%num_nodes
 
     thresholdsq = (mesh%avelen*3)**2
 
@@ -78,7 +81,7 @@ CONTAINS
 
     DO m=1,mesh%nsolids
        
-       qp = GLsolid_quad_points(m, mesh)
+       qp = quad_tetra_points(qd_tetra, m, mesh)
        vol = mesh%solids(m)%volume
 
        ! Pre-compute field integrals in parallel.
@@ -86,7 +89,7 @@ CONTAINS
           DO na2=1,SIZE(ga)
              
              !$OMP PARALLEL DEFAULT(NONE)&
-             !$OMP SHARED(mesh,nweights,ga,intaux1,intaux2,intaux3,k,na,na2,qp,thresholdsq)&
+             !$OMP SHARED(mesh,nweights,ga,intaux1,intaux2,intaux3,k,na,na2,qp,thresholdsq,qd_tri)&
              !$OMP PRIVATE(n,t,rp,diff,near)
              !$OMP DO SCHEDULE(STATIC)
              DO n=1,mesh%nfaces
@@ -100,9 +103,9 @@ CONTAINS
                       near = .FALSE.
                    END IF
                    
-                   intaux1(:,:,t,n,na2,na) = intK2(rp, n, mesh, k, ga(na), NULL(), near)
-                   intaux2(:,:,t,n,na2,na) = intK3(rp, n, mesh, k, ga(na), NULL(), near)
-                   intaux3(:,:,t,n,na2,na) = intK4(rp, n, mesh, k, ga(na), -1, NULL(), near)
+                   intaux1(:,:,t,n,na2,na) = intK2(rp, n, mesh, k, ga(na), NULL(), near, qd_tri)
+                   intaux2(:,:,t,n,na2,na) = intK3(rp, n, mesh, k, ga(na), NULL(), near, qd_tri)
+                   intaux3(:,:,t,n,na2,na) = intK4(rp, n, mesh, k, ga(na), -1, NULL(), near, qd_tri)
                 END DO
              END DO
              !$OMP END DO
@@ -113,18 +116,18 @@ CONTAINS
        ! Pre-compute the current sources for all representations.
 
        !$OMP PARALLEL DEFAULT(NONE)&
-       !$OMP SHARED(nweights,Jb,omegash,mesh,nedgestot,omegaff,riff,xff,ga,nlb,qp)&
+       !$OMP SHARED(nweights,Jb,omegash,mesh,nedgestot,omegaff,riff,xff,ga,nlb,qp,qd_tri)&
        !$OMP PRIVATE(t)
        !$OMP DO SCHEDULE(STATIC)
        DO t=1,nweights
           Jb(:,t,:,:) = -(0,1)*omegash*Pnlb_dipole_ga(mesh, nedgestot, omegaff,&
-               riff, xff, ga, nlb, qp(:,t))
+               riff, xff, ga, nlb, qp(:,t), qd_tri)
        END DO
        !$OMP END DO
        !$OMP END PARALLEL
 
        !$OMP PARALLEL DEFAULT(NONE)&
-       !$OMP SHARED(xff,nweights,omegash,mesh,nedgestot,omegaff,riff,ga,nlb,qp,volQw,intaux1,intaux2,intaux3,c1,c2,vol,src,m,nedges,Jb)&
+       !$OMP SHARED(xff,nweights,omegash,mesh,nedgestot,omegaff,riff,ga,nlb,qp,qd_tetra,intaux1,intaux2,intaux3,c1,c2,vol,src,m,nedges,Jb)&
        !$OMP PRIVATE(ns,t,na,na2,nr,cgae,n,q,int1,int2,int3,index)
        !$OMP DO SCHEDULE(STATIC)
        DO ns=1,SIZE(xff,3)
@@ -140,9 +143,12 @@ CONTAINS
                       int3 = 0.0_dp
                       
                       DO t=1,nweights
-                         int1 = int1 + volQw(t)*dotc(Jb(:,t,na2,ns), intaux1(:,q,t,n,na2,na))
-                         int2 = int2 + volQw(t)*dotc(Jb(:,t,na2,ns), intaux2(:,q,t,n,na2,na))
-                         int3 = int3 + volQw(t)*dotc(Jb(:,t,na2,ns), intaux3(:,q,t,n,na2,na))
+                         int1 = int1 + qd_tetra%weights(t)*dotc(Jb(:,t,na2,ns),&
+                              intaux1(:,q,t,n,na2,na))
+                         int2 = int2 + qd_tetra%weights(t)*dotc(Jb(:,t,na2,ns),&
+                              intaux2(:,q,t,n,na2,na))
+                         int3 = int3 + qd_tetra%weights(t)*dotc(Jb(:,t,na2,ns),&
+                              intaux3(:,q,t,n,na2,na))
                       END DO
                       
                       int1 = c1*int1*vol

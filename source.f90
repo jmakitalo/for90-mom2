@@ -105,34 +105,35 @@ CONTAINS
   ! ga: group actions.
   ! src: source parameters
   ! q: the source vector for all group representations
-  SUBROUTINE srcvec(mesh, nedgestot, omega, ri, ga, src, q)
+  SUBROUTINE srcvec(mesh, nedgestot, omega, ri, ga, src, qd, q)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, INTENT(IN) :: nedgestot
     REAL (KIND=dp) :: omega
     COMPLEX (KIND=dp) :: ri
     TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
     TYPE(srcdata), INTENT(IN) :: src
+    TYPE(quad_data), INTENT(IN) :: qd
 
     COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(INOUT) :: q
 
     INTEGER :: nweights, m, p, r, index, focustype, nr
-    COMPLEX (KIND=dp), DIMENSION(3,SIZE(ga),SIZE(qw),mesh%nfaces) :: ef, hf
+    COMPLEX (KIND=dp), DIMENSION(3,SIZE(ga),qd%num_nodes,mesh%nfaces) :: ef, hf
     COMPLEX (KIND=dp), DIMENSION(3) :: emax
     COMPLEX (KIND=dp), DIMENSION(SIZE(ga)) :: Ie, Ih
     REAL (KIND=dp) :: Am, pm
-    REAL (KIND=dp), DIMENSION(3,SIZE(qw)) :: qpm
+    REAL (KIND=dp), DIMENSION(3,qd%num_nodes) :: qpm
     REAL (KIND=dp), DIMENSION(3) :: fm, pos
     LOGICAL :: print_info
 
     print_info = .FALSE.
 
-    nweights = SIZE(qw)
+    nweights = qd%num_nodes
 
     q(:,:) = 0.0_dp
 
     ! Do we have a dipole source? Requires special treatment.
     IF(src%type==src_dipole) THEN
-       CALL srcvec_dipole(mesh, nedgestot, omega, ri, ga, src%pos, src%dmom, q)
+       CALL srcvec_dipole(mesh, nedgestot, omega, ri, ga, src%pos, src%dmom, qd, q)
        RETURN
     END IF
 
@@ -167,11 +168,11 @@ CONTAINS
     ! Pre-compute excitation fields in parallel.
 
     !$OMP PARALLEL DEFAULT(NONE)&
-    !$OMP SHARED(mesh,nweights,src,omega,ri,ga,ef,hf)&
+    !$OMP SHARED(mesh,nweights,qd,src,omega,ri,ga,ef,hf)&
     !$OMP PRIVATE(m,qpm,r)
     !$OMP DO SCHEDULE(STATIC)
     DO m=1,mesh%nfaces
-       qpm = GLquad_points(m, mesh)
+       qpm = quad_tri_points(qd, m, mesh)
 
        DO r=1,nweights
           ! Compute the source excitation for all representations.
@@ -183,7 +184,7 @@ CONTAINS
 
     ! Go through faces of the mesh.
     DO m=1,mesh%nfaces
-       qpm = GLquad_points(m, mesh)
+       qpm = quad_tri_points(qd, m, mesh)
        Am = mesh%faces(m)%area
     
        ! Go through edges of the current face.
@@ -197,8 +198,8 @@ CONTAINS
 
              ! Compute inner-product integrands for each representation.
              DO nr=1,SIZE(ga)
-                Ie(nr) = Ie(nr) + qw(r)*dotc(CMPLX(fm,KIND=dp), ef(:,nr,r,m))
-                Ih(nr) = Ih(nr) + qw(r)*dotc(CMPLX(fm,KIND=dp), hf(:,nr,r,m))
+                Ie(nr) = Ie(nr) + qd%weights(r)*dotc(CMPLX(fm,KIND=dp), ef(:,nr,r,m))
+                Ih(nr) = Ih(nr) + qd%weights(r)*dotc(CMPLX(fm,KIND=dp), hf(:,nr,r,m))
              END DO
           END DO
         

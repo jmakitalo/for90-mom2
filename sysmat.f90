@@ -59,7 +59,7 @@ CONTAINS
           ! Compute block matrix using action of index ns.
           ! Matrices are independent of field actions.
 
-          CALL computeD(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, M(1:nind,1:nind))
+          CALL computeD(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, b%qd_tri, M(1:nind,1:nind))
 
           ! Add the block matrix to different sub-problems multiplied by proper
           ! field actions.
@@ -72,7 +72,7 @@ CONTAINS
                   + gae*detj*Zsi*M(1:nind,1:nind)
           END DO
 
-          CALL computeH(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, M(1:nind,1:nind))
+          CALL computeH(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, b%qd_tri, M(1:nind,1:nind))
 
           DO nf=1,SIZE(b%ga)
              gae = b%ga(ns)%ef(nf)
@@ -83,7 +83,7 @@ CONTAINS
                   + gae*detj*Zsi*M(1:nind,1:nind)
           END DO
 
-          CALL computeK(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, M(1:nind,1:nind))
+          CALL computeK(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, b%qd_tri, M(1:nind,1:nind))
 
           DO nf=1,SIZE(b%ga)
              gae = b%ga(ns)%ef(nf)
@@ -154,7 +154,7 @@ CONTAINS
           ! Compute block matrix using action of index ns.
           ! Matrices are independent of field actions.
 
-          CALL computeD(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, M(1:nind,1:nind))
+          CALL computeD(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, b%qd_tri, M(1:nind,1:nind))
 
           ! Add the block matrix to different sub-problems multiplied by proper
           ! field actions.
@@ -176,7 +176,7 @@ CONTAINS
              END DO
           END DO
 
-          CALL computeH(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, M(1:nind,1:nind))
+          CALL computeH(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, b%qd_tri, M(1:nind,1:nind))
 
           DO nf=1,SIZE(b%ga)
              gae = b%ga(ns)%ef(nf)
@@ -195,7 +195,7 @@ CONTAINS
              END DO
           END DO
 
-          CALL computeK(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, M(1:nind,1:nind))
+          CALL computeK(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, b%qd_tri, M(1:nind,1:nind))
 
           DO nf=1,SIZE(b%ga)
              gae = b%ga(ns)%ef(nf)
@@ -260,28 +260,29 @@ CONTAINS
   ! prd: The periodic Green's function.
   ! OUT:
   ! D: The D-matrix.
-  SUBROUTINE computeD(omega, ri, mesh, ga, prd, D)
+  SUBROUTINE computeD(omega, ri, mesh, ga, prd, qd, D)
     ! Input variables
     TYPE(mesh_container), INTENT(IN) :: mesh
     COMPLEX (KIND=dp), INTENT(IN) :: ri
     REAL (KIND=dp), INTENT(IN) :: omega
     TYPE(group_action), INTENT(IN) :: ga
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
+    TYPE(quad_data), INTENT(IN) :: qd
 
     ! Internal variables
     COMPLEX (KIND=dp), INTENT(INOUT), DIMENSION(mesh%nedges,mesh%nedges) :: D
     COMPLEX (KIND=dp) :: c1, k
     INTEGER :: nweights, n, m, p, q, r, index1, index2
     REAL (KIND=dp) :: Am
-    REAL (KIND=dp), DIMENSION(3,SIZE(qw)) :: qpm
+    REAL (KIND=dp), DIMENSION(3,qd%num_nodes) :: qpm
     COMPLEX (KIND=dp) :: int1
-    COMPLEX (KIND=dp), DIMENSION(3,3,SIZE(qw),mesh%nfaces) :: intaux
-    REAL (KIND=dp), DIMENSION(3,SIZE(qw),3) :: fmv
+    COMPLEX (KIND=dp), DIMENSION(3,3,qd%num_nodes,mesh%nfaces) :: intaux
+    REAL (KIND=dp), DIMENSION(3,qd%num_nodes,3) :: fmv
     LOGICAL :: near
 
     WRITE(*,*) 'Building a D-matrix'
 
-    nweights = SIZE(qw)
+    nweights = qd%num_nodes
 
     D(:,:) = 0.0_dp
 
@@ -292,7 +293,7 @@ CONTAINS
 
     DO m=1,mesh%nfaces
 
-       qpm = GLquad_points(m, mesh)
+       qpm = quad_tri_points(qd, m, mesh)
        Am = mesh%faces(m)%area
 
        DO p=1,3
@@ -300,14 +301,14 @@ CONTAINS
        END DO
 
        !$OMP PARALLEL DEFAULT(NONE)&
-       !$OMP SHARED(nweights,intaux,qpm,mesh,k,ga,prd,m)&
+       !$OMP SHARED(nweights,intaux,qpm,mesh,k,ga,prd,m,qd)&
        !$OMP PRIVATE(n,near,r)
        !$OMP DO SCHEDULE(STATIC)
        DO n=1,mesh%nfaces
           near = near_faces(mesh, prd, n, m)
 
           DO r=1,nweights
-             intaux(:,:,r,n) = intK2(qpm(:,r), n, mesh, k, ga, prd, near)
+             intaux(:,:,r,n) = intK2(qpm(:,r), n, mesh, k, ga, prd, near, qd)
           END DO                   
        END DO
        !$OMP END DO
@@ -320,7 +321,7 @@ CONTAINS
 
                 int1 = 0.0_dp
                 DO r=1,nweights
-                   int1 = int1 + qw(r)*dotc(CMPLX(fmv(:,r,p),KIND=dp), intaux(:,q,r,n))
+                   int1 = int1 + qd%weights(r)*dotc(CMPLX(fmv(:,r,p),KIND=dp), intaux(:,q,r,n))
                 END DO
                 int1 = int1*Am
 
@@ -346,28 +347,29 @@ CONTAINS
   ! prd: The periodic Green's function.
   ! OUT:
   ! H: The H-matrix.
-  SUBROUTINE computeH(omega, ri, mesh, ga, prd, H)
+  SUBROUTINE computeH(omega, ri, mesh, ga, prd, qd, H)
     ! Input variables
     TYPE(mesh_container), INTENT(IN) :: mesh
     COMPLEX (KIND=dp), INTENT(IN) :: ri
     REAL (KIND=dp), INTENT(IN) :: omega
     TYPE(group_action), INTENT(IN) :: ga
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
+    TYPE(quad_data), INTENT(IN) :: qd
 
     ! Internal variables
     COMPLEX (KIND=dp), INTENT(INOUT), DIMENSION(mesh%nedges,mesh%nedges) :: H
     COMPLEX (KIND=dp) :: c2, k
     INTEGER :: nweights, n, m, p, q, r, index1, index2
     REAL (KIND=dp) :: Am
-    REAL (KIND=dp), DIMENSION(3,SIZE(qw)) :: qpm
+    REAL (KIND=dp), DIMENSION(3,qd%num_nodes) :: qpm
     COMPLEX (KIND=dp) :: int1
     REAL (KIND=dp), DIMENSION(3) :: fmDiv
-    COMPLEX (KIND=dp), DIMENSION(3,SIZE(qw),mesh%nfaces) :: intaux
+    COMPLEX (KIND=dp), DIMENSION(3,qd%num_nodes,mesh%nfaces) :: intaux
     LOGICAL :: near
 
     WRITE(*,*) 'Building an H-matrix'
 
-    nweights = SIZE(qw)
+    nweights = qd%num_nodes
 
     H(:,:) = 0.0_dp
 
@@ -378,7 +380,7 @@ CONTAINS
 
     DO m=1,mesh%nfaces
 
-       qpm = GLquad_points(m, mesh)
+       qpm = quad_tri_points(qd, m, mesh)
        Am = mesh%faces(m)%area
 
        DO p=1,3
@@ -386,14 +388,14 @@ CONTAINS
        END DO
 
        !$OMP PARALLEL DEFAULT(NONE)&
-       !$OMP SHARED(nweights,intaux,qpm,mesh,k,ga,prd,m)&
+       !$OMP SHARED(nweights,intaux,qpm,mesh,k,ga,prd,m,qd)&
        !$OMP PRIVATE(r,n,near)
        !$OMP DO SCHEDULE(STATIC)
        DO n=1,mesh%nfaces
           near = near_faces(mesh, prd, n, m)
 
           DO r=1,nweights
-             intaux(:,r,n) = intK1(qpm(:,r), n, mesh, k, ga, prd, near)
+             intaux(:,r,n) = intK1(qpm(:,r), n, mesh, k, ga, prd, near, qd)
           END DO
        END DO
        !$OMP END DO
@@ -406,7 +408,7 @@ CONTAINS
 
                 int1 = 0.0_dp
                 DO r=1,nweights
-                   int1 = int1 + qw(r)*intaux(q,r,n)
+                   int1 = int1 + qd%weights(r)*intaux(q,r,n)
                 END DO
                 int1 = int1*Am*fmDiv(p)
 
@@ -432,27 +434,28 @@ CONTAINS
   ! prd: The periodic Green's function.
   ! OUT:
   ! A: The K-matrix.
-  SUBROUTINE computeK(omega, ri, mesh, ga, prd, A)
+  SUBROUTINE computeK(omega, ri, mesh, ga, prd, qd, A)
     ! Input variables
     TYPE(mesh_container), INTENT(IN) :: mesh
     COMPLEX (KIND=dp), INTENT(IN) :: ri
     REAL (KIND=dp), INTENT(IN) :: omega
     TYPE(group_action), INTENT(IN) :: ga
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
+    TYPE(quad_data), INTENT(IN) :: qd
 
     ! Internal variables
     COMPLEX (KIND=dp), INTENT(INOUT), DIMENSION(mesh%nedges,mesh%nedges) :: A
     COMPLEX (KIND=dp) :: k, int1
     INTEGER :: nweights, n, m, p, q, r, index1, index2
     REAL (KIND=dp) :: Am
-    REAL (KIND=dp), DIMENSION(3,SIZE(qw)) :: qpm
-    COMPLEX (KIND=dp), DIMENSION(3,3,SIZE(qw),mesh%nfaces) :: intaux
-    REAL (KIND=dp), DIMENSION(3,SIZE(qw),3) :: fmv
+    REAL (KIND=dp), DIMENSION(3,qd%num_nodes) :: qpm
+    COMPLEX (KIND=dp), DIMENSION(3,3,qd%num_nodes,mesh%nfaces) :: intaux
+    REAL (KIND=dp), DIMENSION(3,qd%num_nodes,3) :: fmv
     LOGICAL :: near
 
     WRITE(*,*) 'Building a K-matrix'
 
-    nweights = SIZE(qw)
+    nweights = qd%num_nodes
 
     A(:,:) = 0.0_dp
 
@@ -460,7 +463,7 @@ CONTAINS
 
     DO m=1,mesh%nfaces
 
-       qpm = GLquad_points(m, mesh)
+       qpm = quad_tri_points(qd, m, mesh)
        Am = mesh%faces(m)%area
 
        DO p=1,3
@@ -468,14 +471,14 @@ CONTAINS
        END DO
 
        !$OMP PARALLEL DEFAULT(NONE)&
-       !$OMP SHARED(nweights,intaux,qpm,mesh,k,ga,m,prd)&
+       !$OMP SHARED(nweights,intaux,qpm,mesh,k,ga,m,prd,qd)&
        !$OMP PRIVATE(r,n,near)
        !$OMP DO SCHEDULE(STATIC)
        DO n=1,mesh%nfaces
           near = near_faces(mesh, prd, n, m)
 
           DO r=1,nweights
-             intaux(:,:,r,n) = intK4(qpm(:,r), n, mesh, k, ga, m, prd, near)
+             intaux(:,:,r,n) = intK4(qpm(:,r), n, mesh, k, ga, m, prd, near, qd)
           END DO
        END DO
        !$OMP END DO
@@ -489,7 +492,7 @@ CONTAINS
 
                 int1 = 0.0_dp
                 DO r=1,nweights
-                   int1 = int1 + qw(r)*dotc(CMPLX(fmv(:,r,p),KIND=dp), intaux(:,q,r,n))
+                   int1 = int1 + qd%weights(r)*dotc(CMPLX(fmv(:,r,p),KIND=dp), intaux(:,q,r,n))
                 END DO
                 int1 = int1*Am
 

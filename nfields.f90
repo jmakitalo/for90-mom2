@@ -15,7 +15,7 @@ MODULE nfields
   END TYPE nfield_plane
 
 CONTAINS
-  SUBROUTINE scat_fields(mesh, ga, x, nedgestot, omega, ri, prd, r, e, h)
+  SUBROUTINE scat_fields(mesh, ga, x, nedgestot, omega, ri, prd, r, qd, e, h)
     TYPE(mesh_container), INTENT(IN) :: mesh
     COMPLEX (KIND=dp), INTENT(IN) :: ri
     REAL (KIND=dp), INTENT(IN) :: omega
@@ -24,6 +24,7 @@ CONTAINS
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
     COMPLEX (KIND=dp), DIMENSION(:,:,:), INTENT(IN) :: x
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r
+    TYPE(quad_data), INTENT(IN) :: qd
 
     COMPLEX (KIND=dp), DIMENSION(3,SIZE(x,3)), INTENT(INOUT) :: e, h
     COMPLEX (KIND=dp), DIMENSION(3,SIZE(ga),SIZE(x,3)) :: e2, h2
@@ -32,7 +33,7 @@ CONTAINS
     e(:,:) = 0.0_dp
     h(:,:) = 0.0_dp
 
-    CALL scat_fields_frags(mesh, ga, x, nedgestot, omega, ri, prd, r, e2, h2)
+    CALL scat_fields_frags(mesh, ga, x, nedgestot, omega, ri, prd, r, qd, e2, h2)
 
     DO nf=1,SIZE(ga)
        DO m=1,SIZE(x,3)
@@ -42,7 +43,7 @@ CONTAINS
     END DO
   END SUBROUTINE scat_fields
 
-  SUBROUTINE scat_fields_ga(mesh, ga, x, nedgestot, omega, ri, prd, r, e, h)
+  SUBROUTINE scat_fields_ga(mesh, ga, x, nedgestot, omega, ri, prd, r, qd, e, h)
     TYPE(mesh_container), INTENT(IN) :: mesh
     COMPLEX (KIND=dp), INTENT(IN) :: ri
     REAL (KIND=dp), INTENT(IN) :: omega
@@ -51,6 +52,7 @@ CONTAINS
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
     COMPLEX (KIND=dp), DIMENSION(:,:,:), INTENT(IN) :: x
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r
+    TYPE(quad_data), INTENT(IN) :: qd
 
     COMPLEX (KIND=dp), DIMENSION(3,SIZE(ga),SIZE(x,3)), INTENT(INOUT) :: e, h
     COMPLEX (KIND=dp), DIMENSION(3,SIZE(ga),SIZE(x,3)) :: e2, h2
@@ -60,7 +62,7 @@ CONTAINS
     e(:,:,:) = 0.0_dp
     h(:,:,:) = 0.0_dp
 
-    CALL scat_fields_frags(mesh, ga, x, nedgestot, omega, ri, prd, r, e2, h2)
+    CALL scat_fields_frags(mesh, ga, x, nedgestot, omega, ri, prd, r, qd, e2, h2)
 
     DO na=1,SIZE(ga)
        DO nf=1,SIZE(ga)
@@ -102,7 +104,7 @@ CONTAINS
 !!$    END DO
 !!$  END SUBROUTINE scat_fields_invmap
 
-  SUBROUTINE scat_fields_frags(mesh, ga, x, nedgestot, omega, ri, prd, r, e, h)
+  SUBROUTINE scat_fields_frags(mesh, ga, x, nedgestot, omega, ri, prd, r, qd, e, h)
     TYPE(mesh_container), INTENT(IN) :: mesh
     COMPLEX (KIND=dp), INTENT(IN) :: ri
     REAL (KIND=dp), INTENT(IN) :: omega
@@ -111,6 +113,7 @@ CONTAINS
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
     COMPLEX (KIND=dp), DIMENSION(:,:,:), INTENT(IN) :: x
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r
+    TYPE(quad_data), INTENT(IN) :: qd
 
     COMPLEX (KIND=dp), DIMENSION(3,SIZE(ga),SIZE(x,3)), INTENT(INOUT) :: e, h
 
@@ -143,9 +146,9 @@ CONTAINS
              near = .FALSE.
           END IF
 
-          int1 = intK2(r, n, mesh, k, ga(ns), prd, near)
-          int2 = intK3(r, n, mesh, k, ga(ns), prd, near)
-          int3 = intK4(r, n, mesh, k, ga(ns), 0, prd, near)
+          int1 = intK2(r, n, mesh, k, ga(ns), prd, near, qd)
+          int2 = intK3(r, n, mesh, k, ga(ns), prd, near, qd)
+          int3 = intK4(r, n, mesh, k, ga(ns), 0, prd, near, qd)
        
           DO q=1,3
              index = mesh%faces(n)%edge_indices(q)

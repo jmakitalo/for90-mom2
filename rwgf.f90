@@ -117,20 +117,21 @@ CONTAINS
     res = sign*A/vol
   END FUNCTION solid_rwgDiv
 
-  SUBROUTINE rwg_moments(mesh, F)
+  SUBROUTINE rwg_moments(mesh, qd, F)
     TYPE(mesh_container), INTENT(IN) :: mesh
+    TYPE(quad_data), INTENT(IN) :: qd
 
     COMPLEX (KIND=dp), DIMENSION(mesh%nedges,mesh%nedges), INTENT(INOUT) :: F
     INTEGER :: nbasis, nweights, n, m, q, p, r, t, s, faceind
     REAL (KIND=dp) :: A, int
     REAL (KIND=dp), DIMENSION(3) :: fm, fn
-    REAL (KIND=dp), DIMENSION(3,SIZE(qw)) :: qp
+    REAL (KIND=dp), DIMENSION(3,qd%num_nodes) :: qp
 
     WRITE(*,*) 'Building an F-matrix'
 
     F(:,:) = 0.0_dp
     nbasis = mesh%nedges
-    nweights = SIZE(qw)
+    nweights = qd%num_nodes
 
     DO m=1,mesh%nedges
 
@@ -141,7 +142,7 @@ CONTAINS
              CYCLE
           END IF
 
-          qp = GLquad_points(faceind, mesh)
+          qp = quad_tri_points(qd, faceind, mesh)
           A = mesh%faces(faceind)%area
 
           q = local_edge_index(mesh, faceind, m)
@@ -150,7 +151,7 @@ CONTAINS
           DO r=1,nweights
              fm = rwg(qp(:,r),faceind,q,mesh)
                 
-             int = int + qw(r)*dotr(fm, fm)
+             int = int + qd%weights(r)*dotr(fm, fm)
           END DO
           int = int*A
           
@@ -173,7 +174,7 @@ CONTAINS
           q = local_edge_index(mesh, faceind, m)
           p = local_edge_index(mesh, faceind, n)
 
-          qp = GLquad_points(faceind, mesh)
+          qp = quad_tri_points(qd, faceind, mesh)
           A = mesh%faces(faceind)%area
 
           int = 0.0_dp
@@ -181,7 +182,7 @@ CONTAINS
              fm = rwg(qp(:,r),faceind,q,mesh)
              fn = rwg(qp(:,r),faceind,p,mesh)
                 
-             int = int + qw(r)*dotr(fm, fn)
+             int = int + qd%weights(r)*dotr(fm, fn)
           END DO
           int = int*A
 
@@ -191,20 +192,21 @@ CONTAINS
     END DO
   END SUBROUTINE rwg_moments
 
-  SUBROUTINE rwg_moments2(mesh, F)
+  SUBROUTINE rwg_moments2(mesh, qd, F)
     TYPE(mesh_container), INTENT(IN) :: mesh
+    TYPE(quad_data), INTENT(IN) :: qd
 
     COMPLEX (KIND=dp), DIMENSION(mesh%nedges,mesh%nedges), INTENT(INOUT) :: F
     INTEGER :: nbasis, nweights, n, m, q, p, r, t, s, faceind
     REAL (KIND=dp) :: A, int
     REAL (KIND=dp), DIMENSION(3) :: fm, fn
-    REAL (KIND=dp), DIMENSION(3,SIZE(qw)) :: qp
+    REAL (KIND=dp), DIMENSION(3,qd%num_nodes) :: qp
 
     WRITE(*,*) 'Building an F-matrix'
 
     F(:,:) = 0.0_dp
     nbasis = mesh%nedges
-    nweights = SIZE(qw)
+    nweights = qd%num_nodes
 
     DO m=1,mesh%nedges
 
@@ -224,7 +226,7 @@ CONTAINS
           q = local_edge_index(mesh, faceind, m)
           p = local_edge_index(mesh, faceind, n)
 
-          qp = GLquad_points(faceind, mesh)
+          qp = quad_tri_points(qd, faceind, mesh)
           A = mesh%faces(faceind)%area
 
           int = 0.0_dp
@@ -232,7 +234,7 @@ CONTAINS
              fm = rwg(qp(:,r),faceind,q,mesh)
              fn = rwg(qp(:,r),faceind,p,mesh)
                 
-             int = int + qw(r)*dotr(crossr(mesh%faces(faceind)%n, fm), fn)
+             int = int + qd%weights(r)*dotr(crossr(mesh%faces(faceind)%n, fm), fn)
           END DO
           int = int*A
 

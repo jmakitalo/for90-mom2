@@ -11,7 +11,7 @@ MODULE ffields
   IMPLICIT NONE
 
 CONTAINS
-  SUBROUTINE far_fields(mesh, nedgestot, omega, ri, ga, x, r, theta, phi, et, ep, ht, hp)
+  SUBROUTINE far_fields(mesh, nedgestot, omega, ri, ga, x, r, theta, phi, qd, et, ep, ht, hp)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, INTENT(IN) :: nedgestot
     REAL (KIND=dp), INTENT(IN) :: omega
@@ -19,13 +19,14 @@ CONTAINS
     TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
     COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: x
     REAL (KIND=dp), INTENT(IN) :: r, theta, phi
+    TYPE(quad_data), INTENT(IN) :: qd
 
     COMPLEX (KIND=dp), INTENT(INOUT) :: et, ep, ht, hp
 
     INTEGER :: n, q, index, nweights, t
     COMPLEX (KIND=dp) :: k, Nt, Np, Lt, Lp, quad1, quad2, quad3, quad4, phasor, prefix
     REAL (KIND=dp) :: st, ct, sp, cp, An, detj
-    REAL (KIND=dp), DIMENSION(3,SIZE(qw)) :: qpn
+    REAL (KIND=dp), DIMENSION(3,qd%num_nodes) :: qpn
     REAL (KIND=dp), DIMENSION(3) :: rp, jg, uphi, utheta
     COMPLEX (KIND=dp), DIMENSION(3) :: jn, mn, ed, hd
     COMPLEX (KIND=dp), DIMENSION(nedgestot) :: alpha, beta
@@ -39,7 +40,7 @@ CONTAINS
 
     k = ri*omega/c0
 
-    nweights = SIZE(qw)
+    nweights = qd%num_nodes
 
     Nt = 0.0_dp
     Np = 0.0_dp
@@ -52,7 +53,7 @@ CONTAINS
 
        DO n=1,mesh%nfaces
           An = mesh%faces(n)%area
-          qpn = GLquad_points(n, mesh)
+          qpn = quad_tri_points(qd, n, mesh)
 
           DO q=1,3
              index = mesh%faces(n)%edge_indices(q)
@@ -77,11 +78,11 @@ CONTAINS
 
                    phasor = EXP(-(0,1)*k*(rp(1)*st*cp + rp(2)*st*sp + rp(3)*ct))
                    
-                   quad1 = quad1 + qw(t)*(ct*cp*jn(1) + ct*sp*jn(2) - st*jn(3))*phasor
-                   quad2 = quad2 + qw(t)*(-sp*jn(1) + cp*jn(2))*phasor
+                   quad1 = quad1 + qd%weights(t)*(ct*cp*jn(1) + ct*sp*jn(2) - st*jn(3))*phasor
+                   quad2 = quad2 + qd%weights(t)*(-sp*jn(1) + cp*jn(2))*phasor
                    
-                   quad3 = quad3 + qw(t)*(ct*cp*mn(1) + ct*sp*mn(2) - st*mn(3))*phasor
-                   quad4 = quad4 + qw(t)*(-sp*mn(1) + cp*mn(2))*phasor
+                   quad3 = quad3 + qd%weights(t)*(ct*cp*mn(1) + ct*sp*mn(2) - st*mn(3))*phasor
+                   quad4 = quad4 + qd%weights(t)*(-sp*mn(1) + cp*mn(2))*phasor
                 END DO
                 
                 Nt = Nt + quad1*An
@@ -120,7 +121,7 @@ CONTAINS
 
   ! Radar cross-section integrated over solid angle theta_max
   ! around the z-axis in +z-direction.
-  SUBROUTINE rcs_solangle_old(mesh, nedgestot, omega, ri, ga, x, theta_max, scatp)
+  SUBROUTINE rcs_solangle_old(mesh, nedgestot, omega, ri, ga, x, theta_max, qd, scatp)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, INTENT(IN) :: nedgestot
     REAL (KIND=dp), INTENT(IN) :: omega
@@ -128,6 +129,7 @@ CONTAINS
     TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
     COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: x
     REAL (KIND=dp), INTENT(IN) :: theta_max
+    TYPE(quad_data), INTENT(IN) :: qd
 
     REAL (KIND=dp), INTENT(OUT) :: scatp
     INTEGER, PARAMETER :: nquad = 11
@@ -148,7 +150,7 @@ CONTAINS
        DO m=1,nquad
 
           CALL far_fields(mesh, nedgestot, omega, ri, ga, x, 1.0_dp,&
-               ptt(n), ptp(m), et, ep, ht, hp)
+               ptt(n), ptp(m), qd, et, ep, ht, hp)
 
           p = ABS(et)**2 + ABS(ep)**2
 
@@ -158,7 +160,7 @@ CONTAINS
 
   END SUBROUTINE rcs_solangle_old
 
-  SUBROUTINE rcs_solangle(mesh, nedgestot, omega, ri, ga, x, theta_max, scatp)
+  SUBROUTINE rcs_solangle(mesh, nedgestot, omega, ri, ga, x, theta_max, qd, scatp)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, INTENT(IN) :: nedgestot
     REAL (KIND=dp), INTENT(IN) :: omega
@@ -166,6 +168,7 @@ CONTAINS
     TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
     COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: x
     REAL (KIND=dp), INTENT(IN) :: theta_max
+    TYPE(quad_data), INTENT(IN) :: qd
 
     REAL (KIND=dp), INTENT(OUT) :: scatp
     INTEGER, PARAMETER :: maxDepth = 10
@@ -183,7 +186,7 @@ CONTAINS
       COMPLEX (KIND=dp) :: et, ep, ht, hp
       
       CALL far_fields(mesh, nedgestot, omega, ri, ga, x, 1.0_dp,&
-           theta, phi, et, ep, ht, hp)
+           theta, phi, qd, et, ep, ht, hp)
       
       res = SIN(theta)*(ABS(et)**2 + ABS(ep)**2)
     END FUNCTION integ
@@ -192,7 +195,7 @@ CONTAINS
 
   ! Bistatic radar-cross section a.k.a. radiated power per unit solid angle.
   ! fdir specifies a polarization filter direction vector if filter is true.
-  SUBROUTINE rcs_ext(mesh, nedgestot, omega, ri, ga, x, ntheta, nphi, filter, fdir, rcsdata)
+  SUBROUTINE rcs_ext(mesh, nedgestot, omega, ri, ga, x, ntheta, nphi, filter, fdir, qd, rcsdata)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, INTENT(IN) :: nedgestot
     REAL (KIND=dp), INTENT(IN) :: omega
@@ -202,6 +205,7 @@ CONTAINS
     INTEGER, INTENT(IN) :: ntheta, nphi
     LOGICAL, INTENT(IN) :: filter
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: fdir
+    TYPE(quad_data), INTENT(IN) :: qd
 
     REAL (KIND=dp), DIMENSION(1:ntheta,1:nphi), INTENT(OUT) :: rcsdata
 
@@ -215,7 +219,7 @@ CONTAINS
     c = 1.0_dp
 
     !$OMP PARALLEL DEFAULT(NONE)&
-    !$OMP SHARED(ntheta,nphi,r,rcsdata,c,mesh,nedgestot,omega,ri,ga,x,filter,fdir)&
+    !$OMP SHARED(ntheta,nphi,r,rcsdata,c,mesh,nedgestot,omega,ri,ga,x,filter,fdir,qd)&
     !$OMP PRIVATE(n,m,theta,phi,et,ep,ht,hp,vtheta,vphi,e)
     !$OMP DO SCHEDULE(STATIC)
     DO n=1,ntheta
@@ -223,7 +227,7 @@ CONTAINS
           theta = pi*REAL((n-1),KIND=dp)/REAL((ntheta-1),KIND=dp)
           phi = 2.0_dp*pi*REAL((m-1),KIND=dp)/REAL((nphi-1),KIND=dp)
 
-          CALL far_fields(mesh, nedgestot, omega, ri, ga, x, r, theta, phi, et, ep, ht, hp)
+          CALL far_fields(mesh, nedgestot, omega, ri, ga, x, r, theta, phi, qd, et, ep, ht, hp)
 
           IF(filter==.FALSE.) THEN
              rcsdata(n,m) = c*(ABS(et)**2 + ABS(ep)**2)
@@ -239,7 +243,7 @@ CONTAINS
     !$OMP END PARALLEL
   END SUBROUTINE rcs_ext
 
-  SUBROUTINE rcs(mesh, nedgestot, omega, ri, ga, x, ntheta, nphi, rcsdata)
+  SUBROUTINE rcs(mesh, nedgestot, omega, ri, ga, x, ntheta, nphi, qd, rcsdata)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, INTENT(IN) :: nedgestot
     REAL (KIND=dp), INTENT(IN) :: omega
@@ -247,11 +251,12 @@ CONTAINS
     TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
     COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: x
     INTEGER, INTENT(IN) :: ntheta, nphi
+    TYPE(quad_data), INTENT(IN) :: qd
 
     REAL (KIND=dp), DIMENSION(1:ntheta,1:nphi), INTENT(OUT) :: rcsdata
 
     CALL rcs_ext(mesh, nedgestot, omega, ri, ga, x, ntheta, nphi, .FALSE.,&
-         (/0.0_dp,0.0_dp,0.0_dp/),rcsdata)
+         (/0.0_dp,0.0_dp,0.0_dp/), qd, rcsdata)
   END SUBROUTINE rcs
 
 END MODULE ffields

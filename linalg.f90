@@ -278,4 +278,34 @@ CONTAINS
     rm(:,2) = (/-st, ct, 0.0_dp/)
     rm(:,3) = (/0.0_dp, 0.0_dp, 1.0_dp/)
   END FUNCTION matrix_rz
+
+  ! Rotates vector v around axis by given angle in radians.
+  ! axis is assumed unit length.
+  FUNCTION rotate_vector(v, axis, angle) RESULT(res)
+    REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: v, axis
+    REAL (KIND=dp), INTENT(IN) :: angle
+    REAL (KIND=dp), DIMENSION(3) :: b1, b2
+    REAL (KIND=dp) :: z, x, x2, y2
+
+    REAL (KIND=dp), DIMENSION(3) :: res
+
+    ! Component of v along axis.
+    z = dotr(v, axis)
+
+    ! b1 is a unit vector in plane spanned by v and axis
+    ! and it is orthogonal to axis.
+    b1 = v - z*axis
+    x = normr(b1)
+    b1 = b1/x
+
+    ! b2 is orthogonal to axis and b1.
+    b2 = crossr(axis, b1)
+
+    ! Rotate v around axis in (b1,b2) basis.
+    x2 = COS(angle)*x
+    y2 = SIN(angle)*x
+
+    ! Give the rotated vector in the Cardinal basis.
+    res = x2*b1 + y2*b2 + z*axis
+  END FUNCTION rotate_vector
 END MODULE linalg

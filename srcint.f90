@@ -54,7 +54,7 @@ CONTAINS
 
   ! Returns int_T (O_g'G(r,r'))div'_t(f(r')) dS' for all three RWG functions f
   ! defined over triangle T. Singular case r in T is accurately computed.
-  FUNCTION intK1(r, faceind, mesh, k, ga, prd, near) RESULT(res)
+  FUNCTION intK1(r, faceind, mesh, k, ga, prd, near, qd) RESULT(res)
     TYPE(mesh_container), INTENT(IN) :: mesh
     COMPLEX (KIND=dp), INTENT(IN) :: k
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r
@@ -62,14 +62,15 @@ CONTAINS
     TYPE(group_action), INTENT(IN) :: ga
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
     LOGICAL, INTENT(IN) :: near
+    TYPE(quad_data), INTENT(IN) :: qd
 
     COMPLEX (KIND=dp), DIMENSION(3) :: res
 
     INTEGER :: t, nweights, edgeind
     REAL (KIND=dp) :: An
-    REAL (KIND=dp), DIMENSION(3,SIZE(qw)) :: qpn
+    REAL (KIND=dp), DIMENSION(3,qd%num_nodes) :: qpn
     REAL (KIND=dp) :: divfn
-    COMPLEX (KIND=dp), DIMENSION(SIZE(qw)) :: gv
+    COMPLEX (KIND=dp), DIMENSION(qd%num_nodes) :: gv
     COMPLEX (KIND=dp) :: tmp, aint
     LOGICAL :: singular
 
@@ -80,10 +81,10 @@ CONTAINS
        singular = .TRUE.
     END IF
 
-    nweights = SIZE(qw)
+    nweights = qd%num_nodes
 
     An = mesh%faces(faceind)%area
-    qpn = GLquad_points(faceind, mesh)
+    qpn = quad_tri_points(qd, faceind, mesh)
 
     IF(ga%id/=gid_identity) THEN
        DO t=1,nweights
@@ -101,7 +102,7 @@ CONTAINS
        END IF
     END IF
 
-    tmp = An*SUM(qw*gv)
+    tmp = An*SUM(qd%weights*gv)
 
     DO edgeind=1,3
        divfn = rwgDiv(faceind,edgeind,mesh)
@@ -154,7 +155,7 @@ CONTAINS
 
   ! Returns int_T (O_g'G(r,r'))(J_g f(r')) dS' for all three RWG functions f
   ! defined over triangle T. Singular case r in T is accurately computed.
-  FUNCTION intK2(r, faceind, mesh, k, ga, prd, near) RESULT(res)
+  FUNCTION intK2(r, faceind, mesh, k, ga, prd, near, qd) RESULT(res)
     TYPE(mesh_container), INTENT(IN) :: mesh
     COMPLEX (KIND=dp), INTENT(IN) :: k
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r
@@ -162,14 +163,15 @@ CONTAINS
     TYPE(group_action), INTENT(IN) :: ga
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
     LOGICAL, INTENT(IN) :: near
+    TYPE(quad_data), INTENT(IN) :: qd
 
     COMPLEX (KIND=dp), DIMENSION(3,3) :: res
     COMPLEX (KIND=dp), DIMENSION(3) :: aint
     INTEGER :: edgeind, nweights, t
     REAL (KIND=dp) :: An
-    REAL (KIND=dp), DIMENSION(3,SIZE(qw)) :: qpn, qpn2
-    REAL (KIND=dp), DIMENSION(3,SIZE(qw)) :: fv
-    COMPLEX (KIND=dp), DIMENSION(SIZE(qw)) :: gv
+    REAL (KIND=dp), DIMENSION(3,qd%num_nodes) :: qpn, qpn2
+    REAL (KIND=dp), DIMENSION(3,qd%num_nodes) :: fv
+    COMPLEX (KIND=dp), DIMENSION(qd%num_nodes) :: gv
     LOGICAL :: singular
 
     singular = .FALSE.
@@ -179,10 +181,10 @@ CONTAINS
        singular = .TRUE.
     END IF
 
-    nweights = SIZE(qw)
+    nweights = qd%num_nodes
 
     An = mesh%faces(faceind)%area
-    qpn = GLquad_points(faceind, mesh)
+    qpn = quad_tri_points(qd, faceind, mesh)
 
     IF(ga%id/=gid_identity) THEN
        DO t=1,nweights
@@ -202,7 +204,7 @@ CONTAINS
        END IF
     END IF
 
-    gv = gv*qw*An
+    gv = gv*qd%weights*An
 
     DO edgeind=1,3
        CALL vrwg(qpn(:,:),faceind,edgeind,mesh,fv)
@@ -259,7 +261,7 @@ CONTAINS
 
   ! Returns int_T (O_g'grad'G(r,r'))div'_tf(r') dS' for all three RWG functions f
   ! defined over triangle T. Singular case r in T is accurately computed.
-  FUNCTION intK3(r, faceind, mesh, k, ga, prd, near) RESULT(res)
+  FUNCTION intK3(r, faceind, mesh, k, ga, prd, near, qd) RESULT(res)
     TYPE(mesh_container), INTENT(IN) :: mesh
     COMPLEX (KIND=dp), INTENT(IN) :: k
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r
@@ -267,13 +269,14 @@ CONTAINS
     TYPE(group_action), INTENT(IN) :: ga
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
     LOGICAL, INTENT(IN) :: near
+    TYPE(quad_data), INTENT(IN) :: qd
 
     COMPLEX (KIND=dp), DIMENSION(3,3) :: res
     COMPLEX (KIND=dp), DIMENSION(3) :: aint
     INTEGER :: t, nweights, edgeind
     REAL (KIND=dp) :: An, divfn
-    REAL (KIND=dp), DIMENSION(3,SIZE(qw)) :: qpn
-    COMPLEX (KIND=dp), DIMENSION(3,SIZE(qw)) :: ggv
+    REAL (KIND=dp), DIMENSION(3,qd%num_nodes) :: qpn
+    COMPLEX (KIND=dp), DIMENSION(3,qd%num_nodes) :: ggv
     COMPLEX (KIND=dp), DIMENSION(3) :: tmp
     LOGICAL :: singular
 
@@ -284,10 +287,10 @@ CONTAINS
        singular = .TRUE.
     END IF
 
-    nweights = SIZE(qw)
+    nweights = qd%num_nodes
 
     An = mesh%faces(faceind)%area
-    qpn = GLquad_points(faceind, mesh)
+    qpn = quad_tri_points(qd, faceind, mesh)
 
     IF(ga%id/=gid_identity) THEN
        DO t=1,nweights
@@ -307,7 +310,7 @@ CONTAINS
        END IF
     END IF
 
-    tmp = MATMUL(ggv,qw)*An
+    tmp = MATMUL(ggv,qd%weights)*An
 
     DO edgeind=1,3
        divfn = rwgDiv(faceind,edgeind,mesh)
@@ -364,7 +367,7 @@ CONTAINS
 
   ! Returns int_T (O_g'grad'G(r,r'))x(J_g f(r')) dS' for all three RWG functions f
   ! defined over triangle T. Singular case r in T is accurately computed.
-  FUNCTION intK4(r, faceind, mesh, k, ga, tfaceind, prd, near) RESULT(res)
+  FUNCTION intK4(r, faceind, mesh, k, ga, tfaceind, prd, near, qd) RESULT(res)
     TYPE(mesh_container), INTENT(IN) :: mesh
     COMPLEX (KIND=dp), INTENT(IN) :: k
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r
@@ -372,16 +375,17 @@ CONTAINS
     TYPE(group_action), INTENT(IN) :: ga
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
     LOGICAL, INTENT(IN) :: near
+    TYPE(quad_data), INTENT(IN) :: qd
 
     COMPLEX (KIND=dp), DIMENSION(3,3) :: res
     COMPLEX (KIND=dp), DIMENSION(3) :: aint
     INTEGER :: t, nweights, n, m, edgeind
     REAL (KIND=dp) :: An
-    REAL (KIND=dp), DIMENSION(3,SIZE(qw)) :: qpn, qpn2
+    REAL (KIND=dp), DIMENSION(3,qd%num_nodes) :: qpn, qpn2
     REAL (KIND=dp), DIMENSION(3) :: rho
-    REAL (KIND=dp), DIMENSION(3,SIZE(qw)) :: fv
-    COMPLEX (KIND=dp), DIMENSION(3,SIZE(qw)) :: ggv
-    COMPLEX (KIND=dp), DIMENSION(3,SIZE(qw)) :: tmp
+    REAL (KIND=dp), DIMENSION(3,qd%num_nodes) :: fv
+    COMPLEX (KIND=dp), DIMENSION(3,qd%num_nodes) :: ggv
+    COMPLEX (KIND=dp), DIMENSION(3,qd%num_nodes) :: tmp
     COMPLEX (KIND=dp) :: phase
     LOGICAL :: singular
 
@@ -397,10 +401,10 @@ CONTAINS
        singular = .TRUE.
     END IF
 
-    nweights = SIZE(qw)
+    nweights = qd%num_nodes
 
     An = mesh%faces(faceind)%area
-    qpn = GLquad_points(faceind, mesh)
+    qpn = quad_tri_points(qd, faceind, mesh)
 
     IF(ga%id/=gid_identity) THEN
        DO t=1,nweights
@@ -438,7 +442,7 @@ CONTAINS
           aint = MATMUL(ga%j, aint)/ga%detj
        END IF
 
-       res(:,edgeind) = MATMUL(tmp,qw)*An + aint
+       res(:,edgeind) = MATMUL(tmp,qd%weights)*An + aint
     END DO
   END FUNCTION intK4
 END MODULE srcint

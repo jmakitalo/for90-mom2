@@ -87,10 +87,17 @@ MODULE quad
        0.445948490915965_dp,&
        0.108103018168070_dp/),(/6,3/))
 
+  REAL (KIND=dp), DIMENSION(1), PARAMETER :: qw1 = 1.0_dp
+
+  REAL (KIND=dp), DIMENSION(1,3), PARAMETER :: quadFactors1 = RESHAPE((/&
+       0.333333333333333_dp,&
+       0.333333333333333_dp,&
+       0.333333333333333_dp/),(/1,3/))
+
   REAL (KIND=dp), DIMENSION(3), PARAMETER :: qw3 = (/&
-       0.333333333333333,&
-       0.333333333333333,&
-       0.333333333333333/)
+       0.333333333333333_dp,&
+       0.333333333333333_dp,&
+       0.333333333333333_dp/)
 
   REAL (KIND=dp), DIMENSION(3,3), PARAMETER :: quadFactors3 = RESHAPE((/&
        0.666666666666667,&
@@ -162,11 +169,6 @@ MODULE quad
        0.048690315425316,&
        0.638444188569809,&
        0.312865496004875/),(/13,3/))
-
-  REAL (KIND=dp), DIMENSION(13), PARAMETER :: qw = qw13
-  REAL (KIND=dp), DIMENSION(13,3), PARAMETER :: quadFactors = quadFactors13
-!  REAL (KIND=dp), DIMENSION(4), PARAMETER :: qw = qw4
-!  REAL (KIND=dp), DIMENSION(4,3), PARAMETER :: quadFactors = quadFactors4
 
   REAL (KIND=dp), DIMENSION(1), PARAMETER :: volQw1 = (/1.0_dp/)
 
@@ -264,16 +266,94 @@ MODULE quad
        0.399403576166799,&
        0.100596423833201/),(/11,4/))
 
-  REAL (KIND=dp), DIMENSION(4), PARAMETER :: volQw = volQw4
-  REAL (KIND=dp), DIMENSION(4,4), PARAMETER :: volQuadFactors = volQuadFactors4
-!  REAL (KIND=dp), DIMENSION(1), PARAMETER :: volQw = volQw1
-!  REAL (KIND=dp), DIMENSION(1,4), PARAMETER :: volQuadFactors = volQuadFactors1
+  TYPE quad_data
+     CHARACTER (LEN=256) :: description
+     INTEGER :: num_nodes
+     REAL (KIND=dp), DIMENSION(:), ALLOCATABLE :: weights
+     REAL (KIND=dp), DIMENSION(:,:), ALLOCATABLE :: nodes
+  END type quad_data
 
 CONTAINS
-  FUNCTION GLquad_points(faceind, mesh) RESULT(res)
+  FUNCTION tri_quad_data(name) RESULT(qd)
+    CHARACTER (LEN=*) :: name
+    TYPE(quad_data) :: qd
+
+    IF(name=='tri_gl1') THEN
+       qd%description = '1-point Gauss-Legendre'
+       qd%num_nodes = 1
+       ALLOCATE(qd%weights(qd%num_nodes), qd%nodes(qd%num_nodes,3))
+       qd%weights = qw1
+       qd%nodes = quadFactors1
+    ELSE IF(name=='tri_gl3') THEN
+       qd%description = '3-point Gauss-Legendre'
+       qd%num_nodes = 3
+       ALLOCATE(qd%weights(qd%num_nodes), qd%nodes(qd%num_nodes,3))
+       qd%weights = qw3
+       qd%nodes = quadFactors3
+    ELSE IF(name=='tri_gl4') THEN
+       qd%description = '4-point Gauss-Legendre'
+       qd%num_nodes = 4
+       ALLOCATE(qd%weights(qd%num_nodes), qd%nodes(qd%num_nodes,3))
+       qd%weights = qw4
+       qd%nodes = quadFactors4
+    ELSE IF(name=='tri_gl7') THEN
+       qd%description = '7-point Gauss-Legendre'
+       qd%num_nodes = 7
+       ALLOCATE(qd%weights(qd%num_nodes), qd%nodes(qd%num_nodes,3))
+       qd%weights = qw7
+       qd%nodes = quadFactors7
+    ELSE IF(name=='tri_gl13') THEN
+       qd%description = '13-point Gauss-Legendre'
+       qd%num_nodes = 13
+       ALLOCATE(qd%weights(qd%num_nodes), qd%nodes(qd%num_nodes,3))
+       qd%weights = qw13
+       qd%nodes = quadFactors13
+    ELSE
+       WRITE(*,*) 'Unrecognized quadrature type ', name, '!'
+       STOP
+    END IF
+  END FUNCTION tri_quad_data
+
+  FUNCTION tetra_quad_data(name) RESULT(qd)
+    CHARACTER (LEN=*) :: name
+    TYPE(quad_data) :: qd
+
+    IF(name=='tetra_gl1') THEN
+       qd%description = '1-point Gauss-Legendre'
+       qd%num_nodes = 1
+       ALLOCATE(qd%weights(qd%num_nodes), qd%nodes(qd%num_nodes,4))
+       qd%weights = volQw1
+       qd%nodes = volQuadFactors1
+    ELSE IF(name=='tetra_gl4') THEN
+       qd%description = '4-point Gauss-Legendre'
+       qd%num_nodes = 4
+       ALLOCATE(qd%weights(qd%num_nodes), qd%nodes(qd%num_nodes,4))
+       qd%weights = volQw4
+       qd%nodes = volQuadFactors4
+    ELSE IF(name=='tetra_gl11') THEN
+       qd%description = '11-point Gauss-Legendre'
+       qd%num_nodes = 11
+       ALLOCATE(qd%weights(qd%num_nodes), qd%nodes(qd%num_nodes,4))
+       qd%weights = volQw11
+       qd%nodes = volQuadFactors11
+    ELSE
+       WRITE(*,*) 'Unrecognized quadrature type ', name, '!'
+       STOP
+    END IF
+  END FUNCTION tetra_quad_data
+
+  SUBROUTINE delete_quad_data(qd)
+    TYPE(quad_data), INTENT(INOUT) :: qd
+
+    DEALLOCATE(qd%weights)
+    DEALLOCATE(qd%nodes)
+  END SUBROUTINE delete_quad_data
+
+  FUNCTION quad_tri_points(qd, faceind, mesh) RESULT(res)
+    TYPE(quad_data), INTENT(IN) :: qd
     INTEGER, INTENT(IN) :: faceind
     TYPE(mesh_container), INTENT(IN) :: mesh
-    REAL (KIND=dp), DIMENSION(3,SIZE(qw)) :: res
+    REAL (KIND=dp), DIMENSION(3,qd%num_nodes) :: res
     REAL (KIND=dp), DIMENSION(3) :: p1, p2, p3
     INTEGER :: n
 
@@ -281,33 +361,16 @@ CONTAINS
     p2 = mesh%nodes(mesh%faces(faceind)%node_indices(2))%p
     p3 = mesh%nodes(mesh%faces(faceind)%node_indices(3))%p
 
-    DO n=1,SIZE(qw)
-       res(:,n) = quadFactors(n,3)*p1 + quadFactors(n,1)*p2 + quadFactors(n,2)*p3
+    DO n=1,qd%num_nodes
+       res(:,n) = qd%nodes(n,3)*p1 + qd%nodes(n,1)*p2 + qd%nodes(n,2)*p3
     END DO
-  END FUNCTION GLquad_points
+  END FUNCTION quad_tri_points
 
-  FUNCTION GLquad_points_ext(faceind, mesh, fact, dim) RESULT(res)
-    INTEGER, INTENT(IN) :: faceind
-    TYPE(mesh_container), INTENT(IN) :: mesh
-    INTEGER, INTENT(IN) :: dim
-    REAL (KIND=dp), DIMENSION(dim,3), INTENT(IN) :: fact
-    REAL (KIND=dp), DIMENSION(3,dim) :: res
-    REAL (KIND=dp), DIMENSION(3) :: p1, p2, p3
-    INTEGER :: n
-
-    p1 = mesh%nodes(mesh%faces(faceind)%node_indices(1))%p
-    p2 = mesh%nodes(mesh%faces(faceind)%node_indices(2))%p
-    p3 = mesh%nodes(mesh%faces(faceind)%node_indices(3))%p
-
-    DO n=1,dim
-       res(:,n) = fact(n,3)*p1 + fact(n,1)*p2 + fact(n,2)*p3
-    END DO
-  END FUNCTION GLquad_points_ext
-
-  FUNCTION GLsolid_quad_points(solidind, mesh) RESULT(res)
+  FUNCTION quad_tetra_points(qd, solidind, mesh) RESULT(res)
+    TYPE(quad_data), INTENT(IN) :: qd
     INTEGER, INTENT(IN) :: solidind
     TYPE(mesh_container), INTENT(IN) :: mesh
-    REAL (KIND=dp), DIMENSION(3,SIZE(volQw)) :: res
+    REAL (KIND=dp), DIMENSION(3,qd%num_nodes) :: res
     REAL (KIND=dp), DIMENSION(3) :: p1, p2, p3, p4
     INTEGER :: n
 
@@ -316,10 +379,10 @@ CONTAINS
     p3 = mesh%nodes(mesh%solids(solidind)%node_indices(3))%p
     p4 = mesh%nodes(mesh%solids(solidind)%node_indices(4))%p
 
-    DO n=1,SIZE(volQw)
-       res(:,n) = volQuadFactors(n,1)*p1 + volQuadFactors(n,2)*p2 + volQuadFactors(n,3)*p3 + volQuadFactors(n,4)*p4
+    DO n=1,qd%num_nodes
+       res(:,n) = qd%nodes(n,1)*p1 + qd%nodes(n,2)*p2 + qd%nodes(n,3)*p3 + qd%nodes(n,4)*p4
     END DO
-  END FUNCTION GLsolid_quad_points
+  END FUNCTION quad_tetra_points
 
   ! n is the number of subintervals -> number of nodes is n+1.
   ! n must be even.

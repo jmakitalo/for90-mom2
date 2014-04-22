@@ -65,6 +65,9 @@ CONTAINS
 
     WRITE(*,*) 'Name: ', TRIM(b%name)
 
+    WRITE(*,*) 'Triangle quadrature: ', TRIM(b%qd_tri%description)
+    WRITE(*,*) 'Tetrahedron quadrature: ', TRIM(b%qd_tetra%description)
+
     CALL print_source_info(b%src(1))
 
     prd => NULL()
@@ -115,7 +118,8 @@ CONTAINS
 
        ri = b%media(b%domains(1)%medium_index)%prop(n)%ri
        DO l=1,nsrc
-          CALL srcvec(b%domains(1)%mesh, b%mesh%nedges, omega, ri, b%ga, b%src(l), b%sols(n)%x(:,:,l))
+          CALL srcvec(b%domains(1)%mesh, b%mesh%nedges, omega, ri, b%ga, b%src(l),&
+               b%qd_tri, b%sols(n)%x(:,:,l))
        END DO
        WRITE(*,*) sec_to_str(timer_end())
 
@@ -133,12 +137,12 @@ CONTAINS
 
           ! Allocate memory for SH solution and auxiliary arrays.
           ALLOCATE(b%sols(n)%nlx(nbasis*2, nga, nsrc))
-          ALLOCATE(src_coef(b%mesh%nedges*2,SIZE(b%domains),nga,nsrc))
           ALLOCATE(src_vec(b%mesh%nedges*2))
+          ALLOCATE(b%sols(n)%src_coef(b%mesh%nedges*2,SIZE(b%domains),nga,nsrc))
           ALLOCATE(epsp(b%mesh%nfaces))
 
           b%sols(n)%nlx(:,:,:) = 0.0_dp
-          src_coef(:,:,:,:) = 0.0_dp
+          b%sols(n)%src_coef(:,:,:,:) = 0.0_dp
           src_vec(:) = 0.0_dp
 
           ! epsp is the selvedge-region permittivity, which should be that external
@@ -185,7 +189,8 @@ CONTAINS
                 DO l=1,nsrc
                    CALL nlsurf_coef(b%domains(m)%mesh, b%mesh%nedges, omega, mprop%ri, mprop%shri,&
                         epsp(1:b%domains(m)%mesh%nfaces), b%sols(n)%x(:,:,l), b%ga, nf, mprop%nls,&
-                        src_coef(1:(2*nind),m,nf,l), src_vec(1:(2*nind)))
+                        b%qd_tri, phdx, phdy, b%sols(n)%src_coef(1:(2*nind),m,nf,l),&
+                        src_vec(1:(2*nind)))
 
                    !CALL nlsurf_srcvec(b%domains(m)%mesh, b%mesh%nedges, omega, mprop%ri, mprop%shri,&
                    !     epsp(1:b%domains(m)%mesh%nfaces), b%sols(n)%x(:,:,l), b%ga, nf, mprop%nls,&
@@ -204,7 +209,7 @@ CONTAINS
           ! Compute the system matrix for the nonlinear problem and add the remaining
           ! part to the source vector (this part depends on the submatrices).
           CALL timer_start()
-          CALL sysmat_pmchwt_nls(b, n, A, src_coef, b%sols(n)%nlx)
+          CALL sysmat_pmchwt_nls(b, n, A, b%sols(n)%src_coef, b%sols(n)%nlx)
           WRITE(*,*) sec_to_str(timer_end())
 
           ! Solve the linear system of equations, enforcing boundary conditions.
@@ -214,7 +219,7 @@ CONTAINS
           WRITE(*,*) sec_to_str(timer_end())
 
           ! Free up memory reserved for the auxiliary arrays.
-          DEALLOCATE(src_vec, src_coef, epsp)
+          DEALLOCATE(src_vec, epsp)
        END IF
 
        ! If nonlinear media have been specified, compute second-order response.
@@ -266,7 +271,8 @@ CONTAINS
 
              ! Compute the excitation source vectors for each source and representation.
              CALL srcvec_nlbulk_dipole(b%domains(m)%mesh, b%mesh%nedges, omega, mprop%ri,&
-                  mprop%shri, b%sols(n)%x, b%ga, mprop%nlb, src_vec2(1:(2*nind),:,:))
+                  mprop%shri, b%sols(n)%x, b%ga, mprop%nlb, b%qd_tri, b%qd_tetra,&
+                  src_vec2(1:(2*nind),:,:))
                 
              DO l=1,nsrc
                 ! Place the source vector elements to proper places by the use of

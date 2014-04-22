@@ -142,6 +142,9 @@ CONTAINS
        END DO
        WRITE(*,*) ''
     END DO
+
+    WRITE(*,*) 'det(J):'
+    WRITE(*,*) ga(:)%detj
   END SUBROUTINE print_group
 
   ! Given groups ga1 and ga2, returns the group ga,

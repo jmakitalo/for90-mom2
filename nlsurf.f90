@@ -134,15 +134,16 @@ CONTAINS
   ! E0_n = -<div'f_m,Pn>/(2*epsp)
   ! H0_n = i*Omega*<f_m,Pt x n>/2
   SUBROUTINE nlsurf_coef(mesh, nedgestot, omegaff, riff, rish, epsp, xff, ga,&
-       nf, nls, src_coef, src_vec)
+       nf, nls, qd, phdx, phdy, src_coef, src_vec)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, INTENT(IN) :: nedgestot, nf
     REAL (KIND=dp), INTENT(IN) :: omegaff
-    COMPLEX (KIND=dp), INTENT(IN) :: riff, rish
+    COMPLEX (KIND=dp), INTENT(IN) :: riff, rish, phdx, phdy
     COMPLEX (KIND=dp), DIMENSION(:), INTENT(IN) :: epsp
     COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: xff
     TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
     TYPE(medium_nls), INTENT(IN) :: nls
+    TYPE(quad_data), INTENT(IN) :: qd
    
     COMPLEX (KIND=dp), DIMENSION(:), INTENT(INOUT) :: src_coef, src_vec
     COMPLEX (KIND=dp), DIMENSION(mesh%nedges) :: coef
@@ -152,11 +153,11 @@ CONTAINS
 
     COMPLEX (KIND=dp) :: int1, int2, int3
     REAL (KIND=dp) :: A, fmDiv
-    COMPLEX (KIND=dp), DIMENSION(3,SIZE(qw)) :: Pnls_tan
-    COMPLEX (KIND=dp), DIMENSION(SIZE(qw)) :: Pnls_n
+    COMPLEX (KIND=dp), DIMENSION(3,qd%num_nodes) :: Pnls_tan
+    COMPLEX (KIND=dp), DIMENSION(qd%num_nodes) :: Pnls_n
     COMPLEX (KIND=dp), DIMENSION(3) :: Pnls
     REAL (KIND=dp), DIMENSION(3) :: nor, fm, p1, p2, p
-    REAL (KIND=dp), DIMENSION(3,SIZE(qw)) :: qp
+    REAL (KIND=dp), DIMENSION(3,qd%num_nodes) :: qp
     REAL (KIND=dp) :: omegash
     REAL (KIND=dp), DIMENSION(2) :: pts
     LOGICAL :: contour_method
@@ -169,7 +170,7 @@ CONTAINS
 
     WRITE(*,*) 'Computing second-order surface source basis coefficients'
 
-    nweights = SIZE(qw)
+    nweights = qd%num_nodes
     nbasis = mesh%nedges
 
     coef(:) = 0.0_dp
@@ -177,7 +178,7 @@ CONTAINS
     src_coef(:) = 0.0_dp
 
     DO m=1,mesh%nfaces
-       qp = GLquad_points(m, mesh)
+       qp = quad_tri_points(qd, m, mesh)
        A = mesh%faces(m)%area
        nor = mesh%faces(m)%n
 
@@ -198,9 +199,9 @@ CONTAINS
           DO r=1,nweights
              fm = rwg(qp(:,r), m, q, mesh)
 
-             int1 = int1 - qw(r)*fmDiv*Pnls_n(r)
-             int2 = int2 + qw(r)*dotc(CMPLX(fm,KIND=dp), crossc(Pnls_tan(:,r), CMPLX(nor,KIND=dp)))
-             int3 = int3 + qw(r)*dotc(CMPLX(fm,KIND=dp), Pnls_tan(:,r))
+             int1 = int1 - qd%weights(r)*fmDiv*Pnls_n(r)
+             int2 = int2 + qd%weights(r)*dotc(CMPLX(fm,KIND=dp), crossc(Pnls_tan(:,r), CMPLX(nor,KIND=dp)))
+             int3 = int3 + qd%weights(r)*dotc(CMPLX(fm,KIND=dp), Pnls_tan(:,r))
           END DO
 
           index = mesh%faces(m)%edge_indices(q)
@@ -222,7 +223,7 @@ CONTAINS
 
     ALLOCATE(F(nbasis,nbasis))
 
-    CALL rwg_moments(mesh, F)
+    CALL rwg_moments(mesh, qd, F)
 
     ! Arrange two RHS of a linear system into one array.
     ! These vectors are symmetrical in the same way as the E-field.
@@ -230,8 +231,7 @@ CONTAINS
     tmp(:,2) = src_coef((nbasis+1):(2*nbasis))
 
     ! Impose boundary conditions on the system.
-    ! N.B. Bloch conditions for periodic problems are not properly handled.
-    CALL edge_bc(mesh, ga, (1.0_dp,0.0_dp), (1.0_dp,0.0_dp), nf, id, phase)
+    CALL edge_bc(mesh, ga, phdx, phdy, nf, id, phase)
     CALL resolve_system_dependencies(F, tmp, id(1:nbasis), phase(1:nbasis))
     CALL reduce_system(F, tmp, dim, id(1:nbasis))
 
@@ -288,7 +288,7 @@ CONTAINS
        END DO
     ELSE
        DO m=1,mesh%nfaces
-          qp = GLquad_points(m, mesh)
+          qp = quad_tri_points(qd, m, mesh)
           A = mesh%faces(m)%area
           nor = mesh%faces(m)%n
           
@@ -298,7 +298,7 @@ CONTAINS
              DO r=1,nweights
                 fm = rwg(qp(:,r), m, q, mesh)
                 
-                int1 = int1 + qw(r)*dotc(CMPLX(fm,KIND=dp),&
+                int1 = int1 + qd%weights(r)*dotc(CMPLX(fm,KIND=dp),&
                      crossc(CMPLX(nor,KIND=dp), rwg_exp(qp(:,r), mesh, m, coef)))
              END DO
              
@@ -316,7 +316,15 @@ CONTAINS
     tmp(:,2) = 0.0_dp
 
     ! F was reduced by E-field symmetry previously, so need to compute it again.
-    CALL rwg_moments(mesh, F)
+    CALL rwg_moments(mesh, qd, F)
+
+    ! Transform indexes from nbasis+n -> n.
+    DO m=1,nbasis
+       IF(id(nbasis+m)>nbasis) THEN
+          id(nbasis+m) = id(nbasis+m) - nbasis
+       END IF
+    END DO
+
     CALL resolve_system_dependencies(F, tmp, id((nbasis+1):(2*nbasis)),&
          phase((nbasis+1):(2*nbasis)))
     CALL reduce_system(F, tmp, dim, id((nbasis+1):(2*nbasis)))
@@ -328,18 +336,19 @@ CONTAINS
     DEALLOCATE(F)
   END SUBROUTINE nlsurf_coef
 
-  FUNCTION nls_surface1(mesh, pt, face_index, k, phi) RESULT(res)
+  FUNCTION nls_surface1(mesh, pt, face_index, k, phi, qd) RESULT(res)
     TYPE(mesh_container), INTENT(IN) :: mesh
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: pt
     INTEGER, INTENT(IN) :: face_index
     COMPLEX (KIND=dp), INTENT(IN) :: k
     COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: phi
+    TYPE(quad_data), INTENT(IN) :: qd
     
     COMPLEX (KIND=dp), DIMENSION(3) :: res
     COMPLEX (KIND=dp) :: g
     INTEGER :: n, t
     REAL (KIND=dp) :: An
-    REAL (KIND=dp), DIMENSION(3,SIZE(qw)) :: qpn
+    REAL (KIND=dp), DIMENSION(3,qd%num_nodes) :: qpn
     REAL (KIND=dp), DIMENSION(3) :: nor
     
     res(:) = 0.0_dp
@@ -349,32 +358,33 @@ CONTAINS
           CYCLE
        END IF
        
-       qpn = GLquad_points(n, mesh)
+       qpn = quad_tri_points(qd, n, mesh)
        An = mesh%faces(n)%area
        nor = mesh%faces(n)%n
        
-       DO t=1,SIZE(qw)
+       DO t=1,qd%num_nodes
           g = Gf(pt, qpn(:,t), k)
           
-          res = res + qw(t)*g*phi(t,n)*nor*An
+          res = res + qd%weights(t)*g*phi(t,n)*nor*An
        END DO
     END DO
     
     res = res*(k**2)
   END FUNCTION nls_surface1
 
-  FUNCTION nls_surface2(mesh, pt, face_index, k, phi) RESULT(res)
+  FUNCTION nls_surface2(mesh, pt, face_index, k, phi, qd) RESULT(res)
     TYPE(mesh_container), INTENT(IN) :: mesh
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: pt
     INTEGER, INTENT(IN) :: face_index
     COMPLEX (KIND=dp), INTENT(IN) :: k
     COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: phi
-    
+    TYPE(quad_data), INTENT(IN) :: qd
+
     COMPLEX (KIND=dp) :: res
     COMPLEX (KIND=dp) :: g
     INTEGER :: n, t
     REAL (KIND=dp) :: An
-    REAL (KIND=dp), DIMENSION(3,SIZE(qw)) :: qpn
+    REAL (KIND=dp), DIMENSION(3,qd%num_nodes) :: qpn
     REAL (KIND=dp), DIMENSION(3) :: nor
     
     res = 0.0_dp
@@ -384,14 +394,14 @@ CONTAINS
           CYCLE
        END IF
        
-       qpn = GLquad_points(n, mesh)
+       qpn = quad_tri_points(qd, n, mesh)
        An = mesh%faces(n)%area
        nor = mesh%faces(n)%n
        
-       DO t=1,SIZE(qw)
+       DO t=1,qd%num_nodes
           g = dotc(CMPLX(nor,KIND=dp), gradGf(pt, qpn(:,t), k))
           
-          res = res + qw(t)*g*phi(t,n)*An
+          res = res + qd%weights(t)*g*phi(t,n)*An
        END DO
     END DO
   END FUNCTION nls_surface2
@@ -518,7 +528,7 @@ CONTAINS
   END FUNCTION nls_contour3
 
   SUBROUTINE nlsurf_srcvec(mesh, nedgestot, omegaff, riff, rish, epsp, xff, ga,&
-       nf, nls, src_vec)
+       nf, nls, qd, src_vec)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, INTENT(IN) :: nedgestot, nf
     REAL (KIND=dp), INTENT(IN) :: omegaff
@@ -527,19 +537,20 @@ CONTAINS
     COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: xff
     TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
     TYPE(medium_nls), INTENT(IN) :: nls
+    TYPE(quad_data), INTENT(IN) :: qd
    
     COMPLEX (KIND=dp), DIMENSION(:), INTENT(INOUT) :: src_vec
     INTEGER :: m, m2, r, q, index, nweights, nbasis, t, i
 
     COMPLEX (KIND=dp) :: int1, k
     REAL (KIND=dp) :: A, fmDiv
-    COMPLEX (KIND=dp), DIMENSION(3,SIZE(qw)) :: Pnls_tan
-    COMPLEX (KIND=dp), DIMENSION(SIZE(qw),mesh%nfaces) :: Pnls_n
+    COMPLEX (KIND=dp), DIMENSION(3,qd%num_nodes) :: Pnls_tan
+    COMPLEX (KIND=dp), DIMENSION(qd%num_nodes,mesh%nfaces) :: Pnls_n
     COMPLEX (KIND=dp), DIMENSION(2,3,mesh%nfaces) :: Pnls_n2
     COMPLEX (KIND=dp), DIMENSION(3) :: Pnls, int2, intaux2
     COMPLEX (KIND=dp), DIMENSION(3,3) :: intaux1
     REAL (KIND=dp), DIMENSION(3) :: nor, fm, p1, p2, p
-    REAL (KIND=dp), DIMENSION(3,SIZE(qw)) :: qp
+    REAL (KIND=dp), DIMENSION(3,qd%num_nodes) :: qp
     REAL (KIND=dp) :: omegash
     REAL (KIND=dp), DIMENSION(2) :: pts
     TYPE(prdnfo), POINTER :: prd
@@ -556,13 +567,13 @@ CONTAINS
 
     WRITE(*,*) 'Computing second-order surface source vector'
 
-    nweights = SIZE(qw)
+    nweights = qd%num_nodes
     nbasis = mesh%nedges
 
     ! Pre-compute polarization.
     ! Pre-divide by epsp.
     DO m=1,mesh%nfaces
-       qp = GLquad_points(m, mesh)
+       qp = quad_tri_points(qd, m, mesh)
        nor = mesh%faces(m)%n
 
        ! Surface integration points.
@@ -592,7 +603,7 @@ CONTAINS
 
     ! Compute direct E-source.
     DO m=1,mesh%nfaces
-       qp = GLquad_points(m, mesh)
+       qp = quad_tri_points(qd, m, mesh)
        A = mesh%faces(m)%area
 
        DO q=1,3
@@ -604,7 +615,7 @@ CONTAINS
           DO r=1,nweights
              fm = rwg(qp(:,r), m, q, mesh)
 
-             int1 = int1 + qw(r)*fmDiv*Pnls_n(r,m)
+             int1 = int1 + qd%weights(r)*fmDiv*Pnls_n(r,m)
           END DO
 
           index = mesh%faces(m)%edge_indices(q)
@@ -615,7 +626,7 @@ CONTAINS
 
     ! Compute integrated E-source.
     DO m=1,mesh%nfaces
-       qp = GLquad_points(m, mesh)
+       qp = quad_tri_points(qd, m, mesh)
        A = mesh%faces(m)%area
 
        DO q=1,3
@@ -624,13 +635,14 @@ CONTAINS
           DO r=1,nweights
              fm = rwg(qp(:,r), m, q, mesh)
 
-             int2 = nls_surface1(mesh, qp(:,r), m, k, Pnls_n) &
+             int2 = nls_surface1(mesh, qp(:,r), m, k, Pnls_n, qd) &
                   - nls_contour1(mesh, qp(:,r), m, k, Pnls_n2)&
                   + nls_contour2(mesh, qp(:,r), m, k, Pnls_n2)
 
-             int1 = int1 + qw(r)*dotc(CMPLX(fm,KIND=dp), int2)
+             int1 = int1 + qd%weights(r)*dotc(CMPLX(fm,KIND=dp), int2)
 
-             int1 = int1 + qw(r)*rwgDiv(m, q, mesh)*nls_surface2(mesh, qp(:,r), m, k, Pnls_n)
+             int1 = int1 + qd%weights(r)*rwgDiv(m, q, mesh)*nls_surface2(mesh, qp(:,r), m, k,&
+                  Pnls_n, qd)
           END DO
 
           index = mesh%faces(m)%edge_indices(q)
@@ -649,7 +661,7 @@ CONTAINS
           DO r=1,SIZE(pts)
              p = p1 + (p2-p1)*(pts(r)*0.5_dp + 0.5_dp)
 
-             int1 = nls_surface2(mesh, p, m, k, Pnls_n)
+             int1 = nls_surface2(mesh, p, m, k, Pnls_n, qd)
 
              DO q=1,3
                 fm = rwg(p, m, q, mesh)
@@ -698,17 +710,17 @@ CONTAINS
 !!$    END DO
 
     DO m2=1,mesh%nfaces
-       qp = GLquad_points(m2, mesh)
+       qp = quad_tri_points(qd, m2, mesh)
        A = mesh%faces(m2)%area
        
        int2(:) = 0.0_dp
 
-       DO r=1,SIZE(qw)
+       DO r=1,qd%num_nodes
           intaux2 = nls_contour3(mesh, qp(:,r), m2, k, Pnls_n2)
              
           DO q=1,3
              fm = rwg(qp(:,r), m2, q, mesh)
-             int2(q) = int2(q) + qw(r)*dotc(CMPLX(fm,KIND=dp), intaux2)
+             int2(q) = int2(q) + qd%weights(r)*dotc(CMPLX(fm,KIND=dp), intaux2)
           END DO
        END DO
        
@@ -720,23 +732,23 @@ CONTAINS
     END DO
 
     DO m2=1,mesh%nfaces
-       qp = GLquad_points(m2, mesh)
+       qp = quad_tri_points(qd, m2, mesh)
        A = mesh%faces(m2)%area
        
        int2(:) = 0.0_dp
 
-       DO r=1,SIZE(qw)
+       DO r=1,qd%num_nodes
           intaux2(:) = 0.0_dp
 
           DO m=1,mesh%nfaces
-             intaux1 = intK3(qp(:,r), m, mesh, k, ga(1), prd, .TRUE.)
+             intaux1 = intK3(qp(:,r), m, mesh, k, ga(1), prd, .TRUE., qd)
              intaux2 = intaux2 + crossc(CMPLX(mesh%faces(m)%n,KIND=dp),&
                   intaux1(:,1)/rwgDiv(m, 1, mesh)*Pnls_n(1,m))
           END DO
              
           DO q=1,3
              fm = rwg(qp(:,r), m2, q, mesh)
-             int2(q) = int2(q) + qw(r)*dotc(CMPLX(fm,KIND=dp), intaux2)
+             int2(q) = int2(q) + qd%weights(r)*dotc(CMPLX(fm,KIND=dp), intaux2)
           END DO
        END DO
        

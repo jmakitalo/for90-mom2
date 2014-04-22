@@ -9,7 +9,7 @@ MODULE nfpost
   IMPLICIT NONE
 
 CONTAINS
-  SUBROUTINE field_stream(name, mesh, scale, nedgestot, x, ga, omega, ri, prd, src, addsrc)
+  SUBROUTINE field_stream(name, mesh, scale, nedgestot, x, ga, omega, ri, prd, src, addsrc, qd)
     CHARACTER (LEN=*), INTENT(IN) :: name
     TYPE(mesh_container), INTENT(IN) :: mesh
     REAL (KIND=dp), INTENT(IN) :: scale, omega
@@ -20,6 +20,7 @@ CONTAINS
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
     TYPE(srcdata), INTENT(IN) :: src
     LOGICAL, INTENT(IN) :: addsrc
+    TYPE(quad_data), INTENT(IN) :: qd
 
     INTEGER, PARAMETER :: max_points = 100, nsteps = 4
     COMPLEX (KIND=dp), DIMENSION(SIZE(x,1),SIZE(x,2),1) :: x2
@@ -46,7 +47,7 @@ CONTAINS
              npt(n,s) = m
              
              CALL scat_fields(mesh, ga, x2, nedgestot,&
-                  omega, ri, prd, pt(:,m,n,s), ef, hf)
+                  omega, ri, prd, pt(:,m,n,s), qd, ef, hf)
              
              IF(addsrc) THEN
                 CALL src_fields(src, omega, ri, pt(:,m,n,s), einc, hinc)
@@ -82,7 +83,7 @@ CONTAINS
   END SUBROUTINE field_stream
 
   SUBROUTINE field_domain(name, mesh, scale, nedgestot, x, ga, omega, ri, prd, src, addsrc,&
-       origin, dsize, npoints)
+       origin, dsize, npoints, qd)
     CHARACTER (LEN=*), INTENT(IN) :: name
     TYPE(mesh_container), INTENT(IN) :: mesh
     REAL (KIND=dp), INTENT(IN) :: scale, omega
@@ -95,6 +96,7 @@ CONTAINS
     LOGICAL, INTENT(IN) :: addsrc
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: origin, dsize
     INTEGER, DIMENSION(3), INTENT(IN) :: npoints
+    TYPE(quad_data), INTENT(IN) :: qd
 
     COMPLEX (KIND=dp), DIMENSION(SIZE(x,1),SIZE(x,2),1) :: x2
     CHARACTER (LEN=256) :: oname, numstr
@@ -108,7 +110,7 @@ CONTAINS
     x2 = RESHAPE(x,(/SIZE(x,1),SIZE(x,2),1/))
 
     !$OMP PARALLEL DEFAULT(NONE)&
-    !$OMP SHARED(npoints,pt,origin,dsize,mesh,ga,x2,nedgestot,omega,ri,prd,addsrc,edata,hdata,src)&
+    !$OMP SHARED(npoints,pt,origin,dsize,mesh,ga,x2,nedgestot,omega,ri,prd,addsrc,edata,hdata,src,qd)&
     !$OMP PRIVATE(n,m,l,index,ef,hf,einc,hinc)
     !$OMP DO SCHEDULE(STATIC)
     DO n=1,npoints(1)
@@ -120,7 +122,7 @@ CONTAINS
                   REAL(m-1)/(npoints(2)-1), REAL(l-1)/(npoints(3)-1)/)
 
              CALL scat_fields(mesh, ga, x2, nedgestot,&
-                  omega, ri, prd, pt(:,index), ef, hf)
+                  omega, ri, prd, pt(:,index), qd, ef, hf)
 
              edata(:,index) = ef(:,1)
              hdata(:,index) = hf(:,1)
@@ -260,7 +262,7 @@ CONTAINS
   END SUBROUTINE field_mesh
 
   SUBROUTINE field_external_mesh(name, mesh, scale, nedgestot, x, ga, omega, ri, prd,&
-       addsrc, src, extmesh)
+       addsrc, src, extmesh, qd)
     CHARACTER (LEN=*), INTENT(IN) :: name
     TYPE(mesh_container), INTENT(IN) :: mesh, extmesh
     REAL (KIND=dp), INTENT(IN) :: scale, omega
@@ -271,6 +273,7 @@ CONTAINS
     LOGICAL, INTENT(IN) :: addsrc
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
     TYPE(srcdata), INTENT(IN) :: src
+    TYPE(quad_data), INTENT(IN) :: qd
 
     INTEGER :: n, n2, q, index, nf, nga, na
     COMPLEX (KIND=dp), DIMENSION(3,extmesh%nfaces) :: ef, hf
@@ -286,14 +289,14 @@ CONTAINS
     x2 = RESHAPE(x,(/SIZE(x,1),SIZE(x,2),1/))
 
     !$OMP PARALLEL DEFAULT(NONE)&
-    !$OMP SHARED(extmesh,mesh,ga,x2,nedgestot,omega,ri,prd,ef,hf,src,addsrc)&
+    !$OMP SHARED(extmesh,mesh,ga,x2,nedgestot,omega,ri,prd,ef,hf,src,addsrc,qd)&
     !$OMP PRIVATE(n,pt,einc,hinc)
     !$OMP DO SCHEDULE(STATIC)
     DO n=1,extmesh%nfaces
        pt = extmesh%faces(n)%cp
 
        CALL scat_fields(mesh, ga, x2, nedgestot,&
-            omega, ri, prd, pt, ef(:,n), hf(:,n))
+            omega, ri, prd, pt, qd, ef(:,n), hf(:,n))
 
        IF(addsrc) THEN
           CALL src_fields(src, omega, ri, pt, einc, hinc)
@@ -310,7 +313,7 @@ CONTAINS
 
   END SUBROUTINE field_external_mesh
 
-  SUBROUTINE gradPnls_mesh(name, mesh, scale, nedgestot, x, ga, omega, ri)
+  SUBROUTINE gradPnls_mesh(name, mesh, scale, nedgestot, x, ga, omega, ri, qd)
     CHARACTER (LEN=*), INTENT(IN) :: name
     TYPE(mesh_container), INTENT(IN) :: mesh
     REAL (KIND=dp), INTENT(IN) :: scale, omega
@@ -318,6 +321,7 @@ CONTAINS
     TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
     INTEGER, INTENT(IN) :: nedgestot
     COMPLEX (KIND=dp), INTENT(IN) :: ri
+    TYPE(quad_data), INTENT(IN) :: qd
 
     INTEGER :: n, m, p, q, index, nf, nga, na, nbasis
     COMPLEX (KIND=dp), DIMENSION(3,mesh%nfaces*SIZE(ga)) :: gradPn
@@ -362,7 +366,7 @@ CONTAINS
 
     ALLOCATE(F(nbasis,nbasis))
 
-    CALL rwg_moments(mesh, F)
+    CALL rwg_moments(mesh, qd, F)
 
     CALL solve_linsys(F, b)
 

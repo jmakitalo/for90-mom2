@@ -38,6 +38,11 @@ MODULE common
      ! Third dimension denotes excitation source.
      COMPLEX (KIND=dp), DIMENSION(:,:,:), ALLOCATABLE :: x, nlx
 
+     ! Basis coefficients for jumps in M and J due to surface sources.
+     ! 1st dim: coefficients of M and J jump expansions.
+     ! 2nd dim: domain, 3rd dim: group representation, 4th dim: excitation source.
+     COMPLEX (KIND=dp), DIMENSION(:,:,:,:), ALLOCATABLE :: src_coef
+
      ! Eigenvectors of a spectral problem. First dimension denotes basis coefficients.
      ! Second dimension denotes eigenvalue index.
      COMPLEX (KIND=dp), DIMENSION(:,:), ALLOCATABLE :: eigvec
@@ -95,6 +100,10 @@ MODULE common
 
      ! Media.
      TYPE(medium), DIMENSION(:), ALLOCATABLE :: media
+
+     ! Quadrature data.
+     TYPE(quad_data) :: qd_tri
+     TYPE(quad_data) :: qd_tetra
   END TYPE batch
 
 CONTAINS
@@ -106,11 +115,17 @@ CONTAINS
     b%scale = 1d-9
     b%nwl = 0
     b%src%type = 0
+
+    b%qd_tri = tri_quad_data('tri_gl13')
+    b%qd_tetra = tetra_quad_data('tetra_gl4')
   END SUBROUTINE batch_defaults
 
   SUBROUTINE delete_batch(b)
     TYPE(batch), INTENT(INOUT) :: b
     INTEGER :: i
+
+    CALL delete_quad_data(b%qd_tri)
+    CALL delete_quad_data(b%qd_tetra)
 
     CALL delete_mesh(b%mesh)
 
@@ -172,6 +187,10 @@ CONTAINS
 
     IF(ALLOCATED(s%nlx)) THEN
        DEALLOCATE(s%nlx)
+    END IF
+
+    IF(ALLOCATED(s%src_coef)) THEN
+       DEALLOCATE(s%src_coef)
     END IF
 
     IF(ALLOCATED(s%eigvec)) THEN
