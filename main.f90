@@ -1,10 +1,14 @@
 PROGRAM main
   USE interface
   USE OMP_LIB
+  !USE strat
 
   IMPLICIT NONE
 
   INTEGER :: max_threads
+
+  !CALL plot_integGr()
+  !STOP
 
   WRITE(*,*) 'Method of Moments solver by Jouni Makitalo'
   WRITE(*,*) 'Tampere University of Technology, Optics Laboratory'

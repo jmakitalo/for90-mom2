@@ -1047,55 +1047,31 @@ CONTAINS
   SUBROUTINE read_crst(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
-    INTEGER :: fid=10, iovar, n
+    INTEGER :: fid=10, iovar, n, ns
     REAL (KIND=dp) :: csca, cabs, wl
     REAL (KIND=dp), DIMENSION(b%nwl,3) :: data
     REAL (KIND=dp) :: omega
     COMPLEX (KIND=dp) :: ri
     TYPE(srcdata) :: nlsrc
+    CHARACTER (LEN=256) :: oname, numstr
 
     WRITE(*,*) 'Computing extinction cross-section'
 
-    !$OMP PARALLEL DEFAULT(NONE)&
-    !$OMP SHARED(b,data)&
-    !$OMP PRIVATE(n,omega,ri,wl,csca,cabs)
-    !$OMP DO SCHEDULE(STATIC)
-    DO n=1,b%nwl
-       wl = b%sols(n)%wl
-
-       omega = 2.0_dp*pi*c0/wl
-       ri = b%media(b%domains(1)%medium_index)%prop(n)%ri
-
-       CALL cs_prtsrf(b%domains(1)%mesh, b%mesh%nedges, omega, ri, b%ga,&
-            b%sols(n)%x(:,:,1), b%src(1), b%qd_tri, csca, cabs)
-
-       data(n,1) = wl
-       data(n,2) = csca
-       data(n,3) = cabs
-
-       WRITE(*,'(A,I0,A,I0,:)') ' Wavelength ',  n, ' of ', b%nwl
-    END DO
-    !$OMP END DO
-    !$OMP END PARALLEL
-
-    CALL write_data(TRIM(b%name) // '.crs', data)
-
-    ! Second-harmonic.
-    IF(ALLOCATED(b%sols(1)%nlx)) THEN
-       nlsrc%type = 0
+    ! Consider all excitation sources.
+    DO ns=1,SIZE(b%src)
 
        !$OMP PARALLEL DEFAULT(NONE)&
-       !$OMP SHARED(b,data,nlsrc)&
+       !$OMP SHARED(b,data,ns)&
        !$OMP PRIVATE(n,omega,ri,wl,csca,cabs)
        !$OMP DO SCHEDULE(STATIC)
        DO n=1,b%nwl
           wl = b%sols(n)%wl
           
           omega = 2.0_dp*pi*c0/wl
-          ri = b%media(b%domains(1)%medium_index)%prop(n)%shri
+          ri = b%media(b%domains(1)%medium_index)%prop(n)%ri
           
-          CALL cs_prtsrf(b%domains(1)%mesh, b%mesh%nedges, 2.0_dp*omega, ri, b%ga,&
-               b%sols(n)%nlx(:,:,1), nlsrc, b%qd_tri, csca, cabs)
+          CALL cs_prtsrf(b%domains(1)%mesh, b%mesh%nedges, omega, ri, b%ga,&
+               b%sols(n)%x(:,:,ns), b%src(ns), b%qd_tri, csca, cabs)
           
           data(n,1) = wl
           data(n,2) = csca
@@ -1105,8 +1081,47 @@ CONTAINS
        END DO
        !$OMP END DO
        !$OMP END PARALLEL
+
+       WRITE(numstr, '(A,I0)') '-s', ns
+       oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '.crs'
        
-       CALL write_data(TRIM(b%name) // '-sh.crs', data)
+       CALL write_data(oname, data)
+    END DO
+
+    ! Second-harmonic.
+    IF(ALLOCATED(b%sols(1)%nlx)) THEN
+       nlsrc%type = 0
+
+       ! Consider all excitation sources.
+       DO ns=1,SIZE(b%src)
+          
+          !$OMP PARALLEL DEFAULT(NONE)&
+          !$OMP SHARED(b,data,nlsrc,ns)&
+          !$OMP PRIVATE(n,omega,ri,wl,csca,cabs)
+          !$OMP DO SCHEDULE(STATIC)
+          DO n=1,b%nwl
+             wl = b%sols(n)%wl
+             
+             omega = 2.0_dp*pi*c0/wl
+             ri = b%media(b%domains(1)%medium_index)%prop(n)%shri
+             
+             CALL cs_prtsrf(b%domains(1)%mesh, b%mesh%nedges, 2.0_dp*omega, ri, b%ga,&
+                  b%sols(n)%nlx(:,:,ns), nlsrc, b%qd_tri, csca, cabs)
+             
+             data(n,1) = wl
+             data(n,2) = csca
+             data(n,3) = cabs
+             
+             WRITE(*,'(A,I0,A,I0,:)') ' Wavelength ',  n, ' of ', b%nwl
+          END DO
+          !$OMP END DO
+          !$OMP END PARALLEL
+
+          WRITE(numstr, '(A,I0)') '-s', ns
+          oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-sh.crs'
+          
+          CALL write_data(oname, data)
+       END DO
     END IF
   END SUBROUTINE read_crst
 

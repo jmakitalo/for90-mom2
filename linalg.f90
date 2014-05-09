@@ -27,6 +27,14 @@ CONTAINS
     res = SUM(v1*v2)
   END FUNCTION dotr
 
+  FUNCTION dotrc(v1, v2) RESULT(res)
+    REAL (KIND=dp), DIMENSION(:), INTENT(IN) :: v1
+    COMPLEX (KIND=dp), DIMENSION(:), INTENT(IN) :: v2
+    COMPLEX (KIND=dp) :: res
+
+    res = SUM(v1*v2)
+  END FUNCTION dotrc
+
   FUNCTION normc(v) RESULT(res)
     COMPLEX (KIND=dp), DIMENSION(:), INTENT(IN) :: v
     REAL (KIND=dp) :: res
