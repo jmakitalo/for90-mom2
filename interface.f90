@@ -716,6 +716,89 @@ CONTAINS
     END IF
   END SUBROUTINE read_nfms
 
+  SUBROUTINE read_test(line, b)
+    CHARACTER (LEN=*), INTENT(IN) :: line
+    TYPE(batch), INTENT(INOUT) :: b
+    TYPE(nfield_plane) :: nfplane
+    INTEGER :: wlindex, srcindex, dindex, nind
+    CHARACTER (LEN=256) :: oname, numstr, addsrcstr, meshname
+    REAL (KIND=dp) :: omega
+    COMPLEX (KIND=dp) :: ri
+    TYPE(mesh_container) :: extmesh
+    LOGICAL :: addsrc
+    TYPE(prdnfo), POINTER :: prd
+    COMPLEX (KIND=dp), DIMENSION(:,:,:), ALLOCATABLE :: nlx
+    INTEGER, DIMENSION(b%mesh%nedges) :: ind
+
+    READ(line,*) wlindex, srcindex, dindex, meshname
+
+    extmesh = load_mesh(meshname)
+
+    CALL scale_mesh(extmesh, b%scale)
+    CALL compute_mesh_essentials(extmesh)
+
+    WRITE(numstr, '(A,I0,A,I0,A,I0)') '-wl', wlindex, '-s', srcindex, '-d', dindex
+    oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '.msh'
+
+    omega = 2.0_dp*pi*c0/b%sols(wlindex)%wl
+
+    ! Internal FF
+
+    oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-fftest.msh'
+    
+    ri = b%media(b%domains(dindex)%medium_index)%prop(wlindex)%ri
+    
+    IF(b%domains(dindex)%gf_index>0) THEN
+       prd => b%prd(b%domains(dindex)%gf_index)
+       prd%cwl = find_closest(b%sols(wlindex)%wl, prd%coef(:)%wl)
+    ELSE
+       prd => NULL()
+    END IF
+
+    CALL field_external_mesh(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
+         b%sols(wlindex)%x(:,:,srcindex), b%ga, omega, ri, prd,&
+         .FALSE., b%src(srcindex), extmesh, b%qd_tri)
+
+    ! SH polarization
+    
+    oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-shtest.msh'
+    
+    ri = b%media(b%domains(dindex)%medium_index)%prop(wlindex)%shri
+    
+    IF(b%domains(dindex)%gf_index>0) THEN
+       prd => b%prd(b%domains(dindex)%gf_index)
+       prd%cwl = find_closest(b%sols(wlindex)%wl*0.5_dp, prd%coef(:)%wl)
+    ELSE
+       prd => NULL()
+    END IF
+    
+    ALLOCATE(nlx(SIZE(b%sols(wlindex)%nlx,1), SIZE(b%sols(wlindex)%nlx,2),&
+         SIZE(b%sols(wlindex)%nlx,3)))
+    
+    nlx(:,:,:) = 0.0_dp
+    
+    IF(b%media(b%domains(dindex)%medium_index)%type==mtype_nls) THEN
+       ! Get mapping from local edge indices of domain dindex to global
+       ! edge indices, which correspond to solution coefficient indices.
+       nind = b%domains(dindex)%mesh%nedges
+       ind(1:nind) = b%domains(dindex)%mesh%edges(:)%parent_index
+       
+       nlx(ind(1:nind),:,:) = b%sols(wlindex)%src_coef((nind+1):(2*nind),dindex,:,:)
+       
+       nlx(ind(1:nind)+b%mesh%nedges,:,:) = b%sols(wlindex)%src_coef(1:nind,dindex,:,:)
+    ELSE
+       nlx(:,:,:) = b%sols(wlindex)%nlx(:,:,:)
+    END IF
+    
+    CALL field_external_mesh(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
+         nlx(:,:,srcindex), b%ga, 2.0_dp*omega, ri, prd,&
+         .FALSE., b%src(srcindex), extmesh, b%qd_tri)
+    
+    DEALLOCATE(nlx)
+
+    CALL delete_mesh(extmesh)
+  END SUBROUTINE read_test
+
   SUBROUTINE read_nfem(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
@@ -911,7 +994,7 @@ CONTAINS
     !$OMP PRIVATE(n,theta_max)
     !$OMP DO SCHEDULE(STATIC)
     DO n=1,SIZE(b%src)
-       theta_max = ASIN(b%src(n)%napr)
+       theta_max = ASIN(b%src(n)%napr/REAL(ri,KIND=dp))
 
        CALL rcs_solangle(b%domains(1)%mesh, b%mesh%nedges, omega, ri, b%ga,&
             b%sols(wlindex)%x(:,:,n), theta_max, b%qd_tri, scatp(n))
@@ -935,7 +1018,7 @@ CONTAINS
        !$OMP PRIVATE(n,theta_max)
        !$OMP DO SCHEDULE(STATIC)
        DO n=1,SIZE(b%src)
-          theta_max = ASIN(b%src(n)%napr)
+          theta_max = ASIN(b%src(n)%napr/REAL(ri,KIND=dp))
 
           CALL rcs_solangle(b%domains(1)%mesh, b%mesh%nedges, 2.0_dp*omega, ri, b%ga,&
                b%sols(wlindex)%nlx(:,:,n), theta_max, b%qd_tri, scatp(n))
@@ -1293,6 +1376,8 @@ CONTAINS
           CALL read_quad(line, b)
        ELSE IF(scmd=='csca') THEN
           CALL read_csca(line, b)
+       ELSE IF(scmd=='test') THEN
+          CALL read_test(line, b)
        ELSE
           WRITE(*,*) 'Unrecognized command ', scmd, '!'
        END IF

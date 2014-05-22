@@ -357,8 +357,8 @@ CONTAINS
     INTEGER, INTENT(IN) :: mode
 
     COMPLEX (KIND=dp), DIMENSION(3,3) :: Gdyad
-    COMPLEX (KIND=dp) :: kz1, kz2, rs, rp
-    COMPLEX (KIND=dp), DIMENSION(3) :: bfs
+    COMPLEX (KIND=dp) :: kz1, kz2, rs, rp, J0, J1, J1b
+    COMPLEX (KIND=dp), DIMENSION(2) :: bfs
     REAL (KIND=dp) :: sp, cp, s2p, c2p
 
     sp = SIN(phi)
@@ -385,22 +385,26 @@ CONTAINS
     rp = (eps2*kz1 - eps1*kz2)/(eps2*kz1 + eps1*kz2)
 
     ! Bessel functions of orders 0, 1 and 2.
-    ! bfs(1): order 0, bfs(2): order 1, bfs(3): order 2.
+    ! bfs(1): order 0, bfs(2): order 1.
 
     IF(mode==1) THEN
-       CALL zbesselj(0, 3, krho*rho, bfs)
+       CALL zbesselj(0, 2, krho*rho, bfs)
     ELSE
-       CALL zbesselh(0, 3, mode-1, krho*rho, bfs)
+       CALL zbesselh(0, 2, mode-1, krho*rho, bfs)
     END IF
 
+    J0 = bfs(1)
+    J1 = bfs(2)
+    J1b = J1/(krho*rho)
+
     ! Dyad for p-polarized field.
-    Gdyad = -RESHAPE((/(bfs(1)-bfs(3)*c2p)*kz1, 0.5_dp*bfs(3)*s2p*kz1, -(0,1)*bfs(2)*cp*krho,&
-         0.5_dp*bfs(3)*s2p*kz1, (bfs(1)+bfs(3)*c2p)*kz1, -(0,1)*bfs(2)*sp*krho,&
-         (0,1)*bfs(2)*cp*krho, (0,1)*bfs(2)*sp*krho, -(krho**2)/kz1/), (/3,3/))*rp/(k1**2)
+    Gdyad = -RESHAPE((/(J0*cp*cp-J1b*c2p)*kz1, -(J1b-0.5_dp*J0)*s2p*kz1, -(0,1)*J1*cp*krho,&
+         -(J1b-0.5_dp*J0)*s2p*kz1, (J0*sp*sp+J1b*c2p)*kz1, -(0,1)*J1*sp*krho,&
+         (0,1)*J1*cp*krho, (0,1)*J1*sp*krho, -(krho**2)/kz1/), (/3,3/))*rp/(k1**2)
 
     ! Dyad for s-polarized field.
-    Gdyad(1:2,1:2) = Gdyad(1:2,1:2) + RESHAPE((/bfs(1)+bfs(3)*c2p, -0.5_dp*bfs(3)*s2p,&
-         -0.5_dp*bfs(3)*s2p, bfs(1)-bfs(3)*c2p/), (/2,2/))*rs/kz1
+    Gdyad(1:2,1:2) = Gdyad(1:2,1:2) + RESHAPE((/J0*sp*sp+J1b*c2p, (J1b-0.5_dp*J0)*s2p,&
+         (J1b-0.5_dp*J0)*s2p, J0*cp*cp-J1b*c2p/), (/2,2/))*rs/kz1
 
     Gdyad = Gdyad*EXP((0,1)*kz1*zzp)*krho
 
@@ -429,30 +433,43 @@ CONTAINS
 
     ka = (k1+k2)/2
 
+
     DO n=1,npt
        t = REAL(n-1)/(npt-1)*pi
-
+       
        krho = ka*(1 - COS(t)) - (0,1)*ka*SIN(t)
-
+       
        Gdyad = integGr(krho, rho, phi, zzp, k1, k2, eps1, eps2, 1)
-
+       
        data(n,1:9) = REAL(RESHAPE(Gdyad,(/9/)))
        data(n,10:18) = AIMAG(RESHAPE(Gdyad,(/9/)))
     END DO
 
-    DO n=1,npt
-       t = REAL(n-1)/(npt-1)
 
-       krho = ka*2 + t*k1*(0,1)*1500
-       !krho = ka*2 + t*k1*2500
-
-       Gdyad = integGr(krho, rho, phi, zzp, k1, k2, eps1, eps2, 2)/2
-
-       Gdyad = Gdyad + integGr(CONJG(krho), rho, phi, zzp, k1, k2, eps1, eps2, 3)/2
-
-       data(n+npt,1:9) = REAL(RESHAPE(Gdyad,(/9/)))
-       data(n+npt,10:18) = AIMAG(RESHAPE(Gdyad,(/9/)))
-    END DO
+    IF(rho<zzp) THEN
+       DO n=1,npt
+          t = REAL(n-1)/(npt-1)
+          
+          krho = ka*2 + t*k1*1500
+          
+          Gdyad = integGr(krho, rho, phi, zzp, k1, k2, eps1, eps2, 1)
+          
+          data(n+npt,1:9) = REAL(RESHAPE(Gdyad,(/9/)))
+          data(n+npt,10:18) = AIMAG(RESHAPE(Gdyad,(/9/)))
+       END DO
+    ELSE
+       DO n=1,npt
+          t = REAL(n-1)/(npt-1)
+          
+          krho = ka*2 + t*k1*(0,1)*1500
+          
+          Gdyad = integGr(krho, rho, phi, zzp, k1, k2, eps1, eps2, 2)/2
+          Gdyad = Gdyad + integGr(CONJG(krho), rho, phi, zzp, k1, k2, eps1, eps2, 3)/2
+          
+          data(n+npt,1:9) = REAL(RESHAPE(Gdyad,(/9/)))
+          data(n+npt,10:18) = AIMAG(RESHAPE(Gdyad,(/9/)))
+       END DO
+    END IF
 
     CALL write_data('strat.dat', data)
   END SUBROUTINE plot_integGr
