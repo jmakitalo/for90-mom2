@@ -82,6 +82,22 @@ MODULE mesh
   END TYPE mesh_container
 
 CONTAINS
+  FUNCTION has_mesh_bnd(mesh, bnd) RESULT(res)
+    TYPE(mesh_container), INTENT(IN) :: mesh
+    INTEGER, INTENT(IN) :: bnd
+    LOGICAL :: res
+    INTEGER :: n
+
+    res = .FALSE.
+
+    DO n=1,mesh%nedges
+       IF(mesh%edges(n)%bnd==bnd) THEN
+          res = .TRUE.
+          EXIT
+       END IF
+    END DO
+  END FUNCTION has_mesh_bnd
+
   FUNCTION adjacent_face(mesh, faceind, edgeind) RESULT(res)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, INTENT(IN) :: faceind, edgeind

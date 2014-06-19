@@ -54,6 +54,10 @@ CONTAINS
 
        ! Loop through group actions.
        DO ns=1,SIZE(b%ga)
+          IF(admissible_ga(b%domains(nd)%mesh, b%ga(ns), nd==1)==.FALSE.) THEN
+             CYCLE
+          END IF
+
           detj = b%ga(ns)%detj
        
           ! Compute block matrix using action of index ns.
@@ -149,6 +153,10 @@ CONTAINS
 
        ! Loop through actions.
        DO ns=1,SIZE(b%ga)
+          IF(admissible_ga(b%domains(nd)%mesh, b%ga(ns), nd==1)==.FALSE.) THEN
+             CYCLE
+          END IF
+
           detj = b%ga(ns)%detj
        
           ! Compute block matrix using action of index ns.
@@ -222,10 +230,11 @@ CONTAINS
 
   ! Determine if faces of indices n and m are considered near,
   ! so as to use singularity subtraction, which is time-consuming.
-  FUNCTION near_faces(mesh, prd, n, m) RESULT(res)
+  FUNCTION near_faces(mesh, prd, n, m, ga) RESULT(res)
     TYPE(mesh_container), INTENT(IN) :: mesh
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
     INTEGER, INTENT(IN) :: n, m
+    TYPE(group_action), INTENT(IN) :: ga
 
     LOGICAL :: res
     REAL (KIND=dp), DIMENSION(3) :: diff
@@ -233,7 +242,7 @@ CONTAINS
 
     threshold = mesh%avelen*3
 
-    diff = mesh%faces(m)%cp - mesh%faces(n)%cp
+    diff = mesh%faces(m)%cp - MATMUL(ga%j, mesh%faces(n)%cp)
     distsq = SUM(diff*diff)
 
     IF(distsq<threshold**2) THEN
@@ -305,7 +314,7 @@ CONTAINS
        !$OMP PRIVATE(n,near,r)
        !$OMP DO SCHEDULE(STATIC)
        DO n=1,mesh%nfaces
-          near = near_faces(mesh, prd, n, m)
+          near = near_faces(mesh, prd, n, m, ga)
 
           DO r=1,nweights
              intaux(:,:,r,n) = intK2(qpm(:,r), n, mesh, k, ga, prd, near, qd)
@@ -392,7 +401,7 @@ CONTAINS
        !$OMP PRIVATE(r,n,near)
        !$OMP DO SCHEDULE(STATIC)
        DO n=1,mesh%nfaces
-          near = near_faces(mesh, prd, n, m)
+          near = near_faces(mesh, prd, n, m, ga)
 
           DO r=1,nweights
              intaux(:,r,n) = intK1(qpm(:,r), n, mesh, k, ga, prd, near, qd)
@@ -475,7 +484,7 @@ CONTAINS
        !$OMP PRIVATE(r,n,near)
        !$OMP DO SCHEDULE(STATIC)
        DO n=1,mesh%nfaces
-          near = near_faces(mesh, prd, n, m)
+          near = near_faces(mesh, prd, n, m, ga)
 
           DO r=1,nweights
              intaux(:,:,r,n) = intK4(qpm(:,r), n, mesh, k, ga, m, prd, near, qd)

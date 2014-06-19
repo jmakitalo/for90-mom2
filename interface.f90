@@ -729,6 +729,37 @@ CONTAINS
     TYPE(prdnfo), POINTER :: prd
     COMPLEX (KIND=dp), DIMENSION(:,:,:), ALLOCATABLE :: nlx
     INTEGER, DIMENSION(b%mesh%nedges) :: ind
+    INTEGER :: nd, na
+
+    DO nd=1,SIZE(b%domains)
+       WRITE(*,*) 'domain ', nd
+
+       DO na=1,SIZE(b%ga)
+          WRITE(*,'(A,I0,A)',ADVANCE='NO') 'action ', na, ': '
+          IF(BTEST(b%ga(na)%genbits,gid_mxp)) THEN
+             WRITE(*,'(A)',ADVANCE='NO') 'mxp '
+          END IF
+          IF(BTEST(b%ga(na)%genbits,gid_myp)) THEN
+             WRITE(*,'(A)',ADVANCE='NO') 'myp '
+          END IF
+          IF(BTEST(b%ga(na)%genbits,gid_mzp)) THEN
+             WRITE(*,'(A)',ADVANCE='NO') 'mzp '
+          END IF
+          IF(BTEST(b%ga(na)%genbits,gid_rz)) THEN
+             WRITE(*,'(A)',ADVANCE='NO') 'rz '
+          END IF
+
+          IF(admissible_ga(b%domains(nd)%mesh, b%ga(na), nd==1)) THEN
+             WRITE(*,'(A)') ', admissible'
+          ELSE
+             WRITE(*,'(A)') ', not admissible'
+          END IF
+       END DO
+    END DO
+
+    RETURN
+
+    ! Extinction theorem
 
     READ(line,*) wlindex, srcindex, dindex, meshname
 

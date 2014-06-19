@@ -36,6 +36,9 @@ MODULE symmetry
 
      ! Identifier of a special action.
      INTEGER :: id
+
+     ! Bit flags for group element generators.
+     INTEGER :: genbits
   END type group_action
 
 CONTAINS
@@ -49,6 +52,10 @@ CONTAINS
     ga(1)%detj = 1.0_dp
     ga(1)%ef(1) = 1.0_dp
     ga(1)%id = gid_identity
+
+    ga(1)%genbits = 0
+    ga(1)%genbits = IBSET(ga(1)%genbits, gid_identity)
+
   END SUBROUTINE group_id
 
   SUBROUTINE group_mp(np, ga)
@@ -68,6 +75,9 @@ CONTAINS
     ga(1)%detj = 1.0_dp
     ga(1)%id = gid_identity
 
+    ga(1)%genbits = 0
+    ga(1)%genbits = IBSET(ga(1)%genbits, gid_identity)
+
     ga(2)%ef = (/1.0_dp, -1.0_dp/)
     ga(2)%j = id33r
     ga(2)%j(np,np) = -1.0_dp
@@ -75,10 +85,19 @@ CONTAINS
 
     IF(np==1) THEN
        ga(2)%id = gid_mxp
+
+       ga(2)%genbits = 0
+       ga(2)%genbits = IBSET(ga(2)%genbits, gid_mxp)
     ELSE IF(np==2) THEN
        ga(2)%id = gid_myp
+
+       ga(2)%genbits = 0
+       ga(2)%genbits = IBSET(ga(2)%genbits, gid_myp)
     ELSE IF(np==3) THEN
        ga(2)%id = gid_mzp
+
+       ga(2)%genbits = 0
+       ga(2)%genbits = IBSET(ga(2)%genbits, gid_mzp)
     END IF
   END SUBROUTINE group_mp
 
@@ -104,10 +123,16 @@ CONTAINS
        ga(k)%j = matrix_rz(angle)
        ga(k)%detj = 1.0_dp
        ga(k)%id = 0
+
+       ga(k)%genbits = 0
+       ga(k)%genbits = IBSET(ga(k)%genbits, gid_rz)
     END DO
 
     ga(1)%id = gid_identity
     ga(n)%id = gid_rz
+
+    ga(1)%genbits = 0
+    ga(1)%genbits = IBSET(ga(1)%genbits, gid_identity)
 
     ! Declare field actions to unity.
     DO k=1,n
@@ -168,6 +193,8 @@ CONTAINS
        ga1(n)%j(:,:) = ga(n)%j(:,:)
        ga1(n)%detj = ga(n)%detj
        ga1(n)%id = ga(n)%id
+
+       ga1(n)%genbits = ga(n)%genbits
     END DO
 
     ! Destroy old ga.
@@ -189,6 +216,8 @@ CONTAINS
           ga(k)%j = MATMUL(ga1(n)%j, ga2(m)%j)
           ga(k)%detj = ga1(n)%detj*ga2(m)%detj
           ga(k)%id = 0
+
+          ga(k)%genbits = IOR(ga1(n)%genbits, ga2(m)%genbits)
 
           IF(ga1(n)%id==gid_identity .AND. ga2(m)%id==gid_identity) THEN
              ga(k)%id = gid_identity

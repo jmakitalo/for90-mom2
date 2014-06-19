@@ -231,4 +231,28 @@ CONTAINS
     DEALLOCATE(ind)
   END SUBROUTINE expand_solution
 
+  ! Returns true if the group action is admissible for mapping a boundary
+  ! integral operator defined over the surface mesh, which is a symmetry unit cell.
+  ! Otherwise returns false.
+  FUNCTION admissible_ga(mesh, ga, exterior) RESULT(res)
+    TYPE(mesh_container), INTENT(IN) :: mesh
+    TYPE(group_action), INTENT(IN) :: ga
+    LOGICAL, INTENT(IN) :: exterior
+    LOGICAL :: res
+
+    res = .TRUE.
+
+    IF(exterior) THEN
+       RETURN
+    ELSE IF(BTEST(ga%genbits, gid_mxp) .AND. has_mesh_bnd(mesh, mesh_bnd_xplane)==.FALSE.) THEN
+       res = .FALSE.
+    ELSE IF(BTEST(ga%genbits, gid_myp) .AND. has_mesh_bnd(mesh, mesh_bnd_yplane)==.FALSE.) THEN
+       res = .FALSE.
+    ELSE IF(BTEST(ga%genbits, gid_mzp) .AND. has_mesh_bnd(mesh, mesh_bnd_zplane)==.FALSE.) THEN
+       res = .FALSE.
+    ELSE IF(BTEST(ga%genbits, gid_rz) .AND. has_mesh_bnd(mesh, mesh_bnd_rz1)==.FALSE.) THEN
+       res = .FALSE.
+    END IF
+
+  END FUNCTION admissible_ga
 END MODULE bc

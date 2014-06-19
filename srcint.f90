@@ -439,7 +439,8 @@ CONTAINS
 
        IF(singular) THEN
           aint = intK4singular(MATMUL(TRANSPOSE(ga%j),r), faceind, edgeind, mesh, k, prd, tfaceind)
-          aint = MATMUL(ga%j, aint)/ga%detj
+          !aint = MATMUL(ga%j, aint)/ga%detj
+          aint = MATMUL(ga%j, aint)*ga%detj
        END IF
 
        res(:,edgeind) = MATMUL(tmp,qd%weights)*An + aint
