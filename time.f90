@@ -6,7 +6,7 @@ MODULE time
   IMPLICIT NONE
 
   INTEGER, PARAMETER :: r8=SELECTED_REAL_KIND(12,100)
-  REAL (KIND=r8), PRIVATE, SAVE :: time_start
+  REAL (KIND=r8), PRIVATE, SAVE :: time_start, time_start_cpu
 
 CONTAINS
   FUNCTION get_time() RESULT(sec)
@@ -39,4 +39,17 @@ CONTAINS
     write(str, '(I0,A,I0,A,I0,A)') hours, ' hours ', minutes, ' minutes ',&
          seconds, ' seconds '
   END FUNCTION sec_to_str
+
+  SUBROUTINE cpu_timer_start()
+    CALL cpu_time(time_start_cpu)
+  END SUBROUTINE cpu_timer_start
+
+  FUNCTION cpu_timer_end() RESULT(sec)
+    IMPLICIT NONE
+    REAL (KIND=r8) :: sec
+
+    CALL cpu_time(sec)
+    sec = sec - time_start_cpu
+  END FUNCTION cpu_timer_end
+
 END MODULE time

@@ -5,6 +5,7 @@
 ! Supports the msh-format exported by Gmsh. Contains also functions for
 ! splitting a mesh into submeshes and various mesh manipulation routines.
 MODULE mesh
+  USE aux
   USE linalg
 
   IMPLICIT NONE
@@ -606,7 +607,7 @@ CONTAINS
     CLOSE(fid)
   END FUNCTION get_mesh_element_lines
 
-  FUNCTION load_mesh(filename) RESULT(mesh)
+  FUNCTION load_mesh_gmsh(filename) RESULT(mesh)
     CHARACTER (LEN=*), INTENT(IN) :: filename
     CHARACTER (LEN=256) :: lineid, line
     TYPE(mesh_container) :: mesh
@@ -715,18 +716,11 @@ CONTAINS
 
     CLOSE(fid)
 
-    mesh%nsolid_faces = 0
-
     ! Change vertex index rotation.
   !  DO n=1,mesh%nfaces
   !     CALL swap(mesh%faces(n)%node_indices(2), mesh%faces(n)%node_indices(3))
   !  END DO
 
-    WRITE(*,*) 'Mesh file loaded successfully.'
-    WRITE(*,'(A,I0,:,A)') ' - Read ', mesh%nnodes, ' nodes'
-    WRITE(*,'(A,I0,:,A)') ' - Read ', mesh%nfaces, ' faces'
-    WRITE(*,'(A,I0,:,A)') ' - Read ', mesh%nlines, ' lines'
-    WRITE(*,'(A,I0,:,A)') ' - Read ', mesh%nsolids, ' solids'
 
     !OPEN(10, FILE='nodes', ACTION='write')
     !DO n=1,mesh%nnodes
@@ -739,6 +733,85 @@ CONTAINS
     !   WRITE(10,'(I5,3I5)') n, mesh%faces(n)%node_indices
     !END DO
     !CLOSE(10)
+  END FUNCTION load_mesh_gmsh
+
+  FUNCTION load_mesh_neutral(filename) RESULT(mesh)
+    CHARACTER (LEN=*), INTENT(IN) :: filename
+    TYPE(mesh_container) :: mesh
+    INTEGER :: fid = 10, n, iovar, bndid
+
+    OPEN(fid, FILE=TRIM(filename), ACTION='READ', IOSTAT=iovar)
+    IF(iovar>0) THEN
+       WRITE(*,*) 'Could not open mesh file!'
+       STOP
+    END IF
+
+    iovar = 0
+
+    ! Load nodes.
+    
+    READ(fid, *, IOSTAT=iovar) mesh%nnodes
+    
+    ALLOCATE(mesh%nodes(mesh%nnodes))
+    
+    DO n=1,mesh%nnodes
+       READ(fid, *, IOSTAT=iovar) mesh%nodes(n)%p(1:3)
+    END DO
+    
+    ! Load solids (tetrahedra).
+    
+    READ(fid, *, IOSTAT=iovar) mesh%nsolids
+    
+    IF(mesh%nsolids>0) THEN
+       ALLOCATE(mesh%solids(mesh%nsolids))
+       
+       DO n=1,mesh%nsolids
+          mesh%solids(n)%id = 1
+          READ(fid, *, IOSTAT=iovar) mesh%solids(n)%node_indices(1:4)
+       END DO
+    END IF
+    
+    ! Load faces (triangles).
+    
+    READ(fid, *, IOSTAT=iovar) mesh%nfaces
+    
+    ALLOCATE(mesh%faces(mesh%nfaces))
+    
+    DO n=1,mesh%nfaces
+       mesh%faces(n)%id = 1
+       READ(fid, *, IOSTAT=iovar) bndid, mesh%faces(n)%node_indices(1:3)
+    END DO
+
+    CLOSE(fid)
+
+    mesh%nlines = 0
+
+  END FUNCTION load_mesh_neutral
+
+  FUNCTION load_mesh(filename) RESULT(mesh)
+    CHARACTER (LEN=*), INTENT(IN) :: filename
+    TYPE(mesh_container) :: mesh
+    CHARACTER (LEN=3) :: ext
+
+    ext = getext(filename)
+
+    IF(ext=='msh') THEN
+       mesh = load_mesh_gmsh(filename)
+    ELSE IF(ext=='nmf') THEN
+       mesh = load_mesh_neutral(filename)
+    ELSE
+       WRITE(*,*) 'Unrecognized mesh file extension!'
+       STOP
+    END IF
+
+    mesh%nsolid_faces = 0
+
+    WRITE(*,*) 'Mesh file loaded successfully.'
+    WRITE(*,'(A,I0,:,A)') ' - Read ', mesh%nnodes, ' nodes'
+    WRITE(*,'(A,I0,:,A)') ' - Read ', mesh%nfaces, ' faces'
+    WRITE(*,'(A,I0,:,A)') ' - Read ', mesh%nlines, ' lines'
+    WRITE(*,'(A,I0,:,A)') ' - Read ', mesh%nsolids, ' solids'
+    
   END FUNCTION load_mesh
 
   SUBROUTINE delete_mesh(mesh)

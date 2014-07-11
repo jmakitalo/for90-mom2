@@ -332,18 +332,12 @@ CONTAINS
   SUBROUTINE read_mesh(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
-    CHARACTER (LEN=3) :: ext
 
     READ(line,*) b%mesh_file, b%scale
 
-    ext = getext(b%mesh_file)
-    IF(ext=='msh') THEN
-       b%mesh = load_mesh(b%mesh_file)
-       CALL build_mesh(b%mesh, b%scale)
-    ELSE
-       WRITE(*,*) 'Invalid mesh extension!'
-       STOP
-    END IF
+    b%mesh = load_mesh(b%mesh_file)
+
+    CALL build_mesh(b%mesh, b%scale)
   END SUBROUTINE read_mesh
 
   SUBROUTINE read_wlrange(line, b)

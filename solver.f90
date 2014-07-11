@@ -105,8 +105,12 @@ CONTAINS
        ! Compute the system matrix for all group representations.
        ! This is O(N^2), but in practice the most time consuming part.
        CALL timer_start()
+       CALL cpu_timer_start()
        CALL sysmat_pmchwt(b, n, A)
+       WRITE(*,*) 'Wall-clock time:'
        WRITE(*,*) sec_to_str(timer_end())
+       WRITE(*,*) 'CPU time:'
+       WRITE(*,*) sec_to_str(cpu_timer_end())
 
        ! Allocate memory for source/solution vector.
        ALLOCATE(b%sols(n)%x(nbasis*2, nga, nsrc))
@@ -128,8 +132,12 @@ CONTAINS
        ! This is O(N^3) but often in practice very fast.
        WRITE(*,*) 'Solving system'
        CALL timer_start()
+       CALL cpu_timer_start()
        CALL solve_systems(b%mesh, b%ga, phdx, phdy, A, b%sols(n)%x)
+       WRITE(*,*) 'Wall-clock time:'
        WRITE(*,*) sec_to_str(timer_end())
+       WRITE(*,*) 'CPU time:'
+       WRITE(*,*) sec_to_str(cpu_timer_end())
 
        ! If nonlinear media have been specified, compute second-order response.
        IF(is_nl_centrosym(b)) THEN
