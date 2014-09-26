@@ -34,6 +34,38 @@ CONTAINS
     res = start + t*(end - start)
   END FUNCTION linterp
 
+  SUBROUTINE get_matrix(filename, mat, nrows, ncols)
+    CHARACTER (LEN=*), INTENT(IN) :: filename
+    INTEGER :: fid = 10, iovar, i
+    INTEGER, PARAMETER :: nattempts = 10
+    REAL (KIND=dp), DIMENSION(nrows,ncols), INTENT(INOUT) :: mat
+    INTEGER, INTENT(IN) :: nrows, ncols
+
+    ! Attempt to open the file for nattempts times before resorting
+    ! to failure. This is so that multiple instances of the program
+    ! can access the same refractive index files simultaneously.
+
+    DO i=1,nattempts
+       OPEN(fid, FILE=TRIM(filename), ACTION='READ', IOSTAT=iovar)
+       IF(iovar>0) THEN
+          CALL SLEEP(1)
+       END IF
+    END DO
+
+    IF(i==nattempts .AND. iovar>0) THEN
+       WRITE(*,*) 'Could not open matrix data file!'
+       STOP
+    END IF
+
+    iovar = 0
+    DO i=1,nrows
+       READ(fid,*) mat(i,1:ncols)
+    END DO
+
+    CLOSE(fid)
+
+  END SUBROUTINE get_matrix
+
   FUNCTION get_refind(filename, wl) RESULT(res)
     CHARACTER (LEN=*), INTENT(IN) :: filename
     REAL (KIND=dp), INTENT(IN) :: wl

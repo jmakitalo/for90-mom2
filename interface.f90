@@ -235,8 +235,9 @@ CONTAINS
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
     INTEGER :: mindex, n
-    CHARACTER (LEN=256) :: type, method, file
+    CHARACTER (LEN=256) :: type, method, file, file2, file3
     COMPLEX (KIND=dp) :: val
+    REAL (KIND=dp), DIMENSION(3,6) :: chi2
 
     IF(ALLOCATED(b%media)==.FALSE.) THEN
        WRITE(*,*) 'Error: no media allocated!'
@@ -314,11 +315,34 @@ CONTAINS
 
        b%media(mindex)%type = mtype_nlb_dipole
 
-       IF(method=='value') THEN
-          READ(line,*) mindex, type, method, b%media(mindex)%prop(1)%nlb%chi2zzz
+       IF(method=='file') THEN
+          READ(line,*) mindex, type, method, file, file2, file3
+
+          CALL get_matrix(TRIM(ADJUSTL(file)), chi2, 3, 6)
+          b%media(mindex)%prop(1)%nlb%chi2 = chi2
+
+          CALL get_matrix(TRIM(ADJUSTL(file2)), b%media(mindex)%prop(1)%nlb%T, 3, 3)
+          CALL get_matrix(TRIM(ADJUSTL(file3)), b%media(mindex)%prop(1)%nlb%invT, 3, 3)
+
+          WRITE(*,*) 'chi2'
+          WRITE(*,*) b%media(mindex)%prop(1)%nlb%chi2(1,:)
+          WRITE(*,*) b%media(mindex)%prop(1)%nlb%chi2(2,:)
+          WRITE(*,*) b%media(mindex)%prop(1)%nlb%chi2(3,:)
+
+          WRITE(*,*) 'crystal to lab'
+          WRITE(*,*) b%media(mindex)%prop(1)%nlb%T(1,:)
+          WRITE(*,*) b%media(mindex)%prop(1)%nlb%T(2,:)
+          WRITE(*,*) b%media(mindex)%prop(1)%nlb%T(3,:)
+
+          WRITE(*,*) 'lab to crystal'
+          WRITE(*,*) b%media(mindex)%prop(1)%nlb%invT(1,:)
+          WRITE(*,*) b%media(mindex)%prop(1)%nlb%invT(2,:)
+          WRITE(*,*) b%media(mindex)%prop(1)%nlb%invT(3,:)
 
           DO n=1,b%nwl
-             b%media(mindex)%prop(n)%nlb%chi2zzz = b%media(mindex)%prop(1)%nlb%chi2zzz
+             b%media(mindex)%prop(n)%nlb%chi2 = b%media(mindex)%prop(1)%nlb%chi2
+             b%media(mindex)%prop(n)%nlb%T = b%media(mindex)%prop(1)%nlb%T
+             b%media(mindex)%prop(n)%nlb%invT = b%media(mindex)%prop(1)%nlb%invT
           END DO
        ELSE
           WRITE(*,*) 'Unrecongnized method for retrieveing medium properties!'
@@ -631,12 +655,14 @@ CONTAINS
   SUBROUTINE read_trns(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
-    INTEGER :: fid=10, iovar, n, dindexT, dindexR
+    INTEGER :: fid=10, iovar, n, dindexT, dindexR, srcindex
     REAL (KIND=dp) :: wl, omega, z0T, z0R
     REAL (KIND=dp), DIMENSION(b%nwl,3) :: data
+    REAL (KIND=dp), DIMENSION(b%nwl,SIZE(b%src)) :: Tpower, Rpower
     COMPLEX (KIND=dp) :: ri, ri_inc
     TYPE(prdnfo), POINTER :: prd
     CHARACTER (LEN=64) :: addsrc_str
+    CHARACTER (LEN=256) :: oname, numstr
     LOGICAL :: addsrc
 
     READ(line,*) dindexT, z0T, addsrc_str, dindexR, z0R
@@ -654,32 +680,75 @@ CONTAINS
        omega = 2.0_dp*pi*c0/wl
        ri_inc = b%media(b%domains(1)%medium_index)%prop(n)%ri
 
-       data(n,1) = wl
-
        ri = b%media(b%domains(dindexT)%medium_index)%prop(n)%ri
        prd => b%prd(b%domains(dindexT)%gf_index)
        prd%cwl = find_closest(wl, prd%coef(:)%wl)
 
-       data(n,2) = transmittance(b%domains(dindexT)%mesh, b%ga, addsrc, b%src(1),&
+       Tpower(n,:) = transmittance(b%domains(dindexT)%mesh, b%ga, addsrc, b%src,&
             b%sols(n)%x, b%mesh%nedges, omega, ri, ri_inc, prd, z0T, -1.0_dp, b%qd_tri)
 
        ri = b%media(b%domains(dindexR)%medium_index)%prop(n)%ri
        prd => b%prd(b%domains(dindexR)%gf_index)
        prd%cwl = find_closest(wl, prd%coef(:)%wl)
 
-       data(n,3) = transmittance(b%domains(dindexR)%mesh, b%ga, .FALSE., b%src(1),&
+       Rpower(n,:) = transmittance(b%domains(dindexR)%mesh, b%ga, .FALSE., b%src,&
             b%sols(n)%x, b%mesh%nedges, omega, ri, ri_inc, prd, z0R, 1.0_dp, b%qd_tri)
 
        WRITE(*,'(A,I0,A,I0,:)') ' Wavelength ',  n, ' of ', b%nwl
     END DO
 
-    CALL write_data(TRIM(b%name) // '-trns.dat', data)
+    data(:,1) = b%sols(:)%wl
+
+    DO n=1,SIZE(b%src)
+       data(:,2) = Tpower(:,n)
+       data(:,3) = Rpower(:,n)
+
+       WRITE(numstr, '(A,I0)') '-s', n
+       oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-trns.dat'
+
+       CALL write_data(TRIM(oname), data)
+    END DO
+
+    IF(ALLOCATED(b%sols(1)%nlx)) THEN
+       DO n=1,b%nwl
+          ! SH wavelength.
+          wl = b%sols(n)%wl/2
+          omega = 2.0_dp*pi*c0/wl
+          ri_inc = b%media(b%domains(1)%medium_index)%prop(n)%ri
+                    
+          ri = b%media(b%domains(dindexT)%medium_index)%prop(n)%shri
+          prd => b%prd(b%domains(dindexT)%gf_index)
+          prd%cwl = find_closest(wl, prd%coef(:)%wl)
+          
+          Tpower(n,:) = transmittance(b%domains(dindexT)%mesh, b%ga, .FALSE., b%src,&
+               b%sols(n)%nlx, b%mesh%nedges, omega, ri, ri_inc, prd, z0T, -1.0_dp, b%qd_tri)
+          
+          ri = b%media(b%domains(dindexR)%medium_index)%prop(n)%shri
+          prd => b%prd(b%domains(dindexR)%gf_index)
+          prd%cwl = find_closest(wl, prd%coef(:)%wl)
+          
+          Rpower(n,:) = transmittance(b%domains(dindexR)%mesh, b%ga, .FALSE., b%src,&
+               b%sols(n)%nlx, b%mesh%nedges, omega, ri, ri_inc, prd, z0R, 1.0_dp, b%qd_tri)
+          
+          WRITE(*,'(A,I0,A,I0,:)') ' Wavelength ',  n, ' of ', b%nwl
+       END DO
+
+       DO n=1,SIZE(b%src)
+          data(:,2) = Tpower(:,n)
+          data(:,3) = Rpower(:,n)
+          
+          WRITE(numstr, '(A,I0)') '-s', n
+          oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-trns-sh.dat'
+          
+          CALL write_data(TRIM(oname), data)
+       END DO
+       
+    END IF
   END SUBROUTINE read_trns
 
   SUBROUTINE read_nfms(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
-    TYPE(nfield_plane) :: nfplane
     INTEGER :: wlindex, srcindex, dindex
     CHARACTER (LEN=256) :: oname, numstr
     REAL (KIND=dp) :: omega
@@ -709,6 +778,97 @@ CONTAINS
 
     END IF
   END SUBROUTINE read_nfms
+
+  SUBROUTINE read_nfpl(line, b)
+    CHARACTER (LEN=*), INTENT(IN) :: line
+    TYPE(batch), INTENT(INOUT) :: b
+    TYPE(nfield_plane) :: nfplane
+    INTEGER :: wlindex, srcindex, dindex, n1, n2, ns
+    CHARACTER (LEN=256) :: oname, numstr, tag
+    REAL (KIND=dp), DIMENSION(3) :: v1, v2, origin
+    REAL (KIND=dp) :: omega, wl
+    COMPLEX (KIND=dp) :: ri
+    COMPLEX (KIND=dp), DIMENSION(:,:,:,:), ALLOCATABLE :: ef, hf
+    TYPE(prdnfo), POINTER :: prd
+
+    READ(line,*) wlindex, dindex, origin, v1, v2, n1, n2, tag
+
+    ALLOCATE(ef(3,SIZE(b%src),n2,n1), hf(3,SIZE(b%src),n2,n1))
+
+    wl = b%sols(wlindex)%wl
+    omega = 2.0_dp*pi*c0/wl
+    ri = b%media(b%domains(dindex)%medium_index)%prop(wlindex)%ri
+
+    IF(b%domains(dindex)%gf_index/=-1) THEN
+       prd => b%prd(b%domains(dindex)%gf_index)
+       prd%cwl = find_closest(wl, prd%coef(:)%wl)
+    ELSE
+       prd => NULL()
+    END IF
+
+    CALL field_plane(b%domains(dindex)%mesh, b%mesh%nedges, b%sols(wlindex)%x, b%ga,&
+         omega, ri, prd, dindex==1, b%src, b%qd_tri, origin, v1, v2, n1, n2, ef, hf)
+
+    DO ns=1,SIZE(b%src)
+       WRITE(numstr, '(A,I0,A,I0,A,I0,A,A)') '-wl', wlindex, '-s', ns, '-d', dindex, '-', TRIM(ADJUSTL(tag))
+
+       CALL write_data(TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-ex-re.dat', REAL(ef(1,ns,:,:),KIND=dp))
+       CALL write_data(TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-ey-re.dat', REAL(ef(2,ns,:,:),KIND=dp))
+       CALL write_data(TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-ez-re.dat', REAL(ef(3,ns,:,:),KIND=dp))
+
+       CALL write_data(TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-ex-im.dat', AIMAG(ef(1,ns,:,:)))
+       CALL write_data(TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-ey-im.dat', AIMAG(ef(2,ns,:,:)))
+       CALL write_data(TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-ez-im.dat', AIMAG(ef(3,ns,:,:)))
+
+       CALL write_data(TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-hx-re.dat', REAL(hf(1,ns,:,:),KIND=dp))
+       CALL write_data(TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-hy-re.dat', REAL(hf(2,ns,:,:),KIND=dp))
+       CALL write_data(TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-hz-re.dat', REAL(hf(3,ns,:,:),KIND=dp))
+
+       CALL write_data(TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-hx-im.dat', AIMAG(hf(1,ns,:,:)))
+       CALL write_data(TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-hy-im.dat', AIMAG(hf(2,ns,:,:)))
+       CALL write_data(TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-hz-im.dat', AIMAG(hf(3,ns,:,:)))
+    END DO
+
+    IF(ALLOCATED(b%sols(wlindex)%nlx)) THEN
+       wl = b%sols(wlindex)%wl/2 ! SHG wavelength
+       !omega = 2.0_dp*pi*c0/b%sols(wlindex)%wl   mistake found 9.9.2014
+       omega = 2.0_dp*pi*c0/wl
+       ri = b%media(b%domains(dindex)%medium_index)%prop(wlindex)%shri
+       
+       IF(b%domains(dindex)%gf_index/=-1) THEN
+          prd => b%prd(b%domains(dindex)%gf_index)
+          prd%cwl = find_closest(wl, prd%coef(:)%wl)
+       ELSE
+          prd => NULL()
+       END IF
+       
+       CALL field_plane(b%domains(dindex)%mesh, b%mesh%nedges, b%sols(wlindex)%nlx, b%ga,&
+            omega, ri, prd, .FALSE., b%src, b%qd_tri, origin, v1, v2, n1, n2, ef, hf)
+       
+       DO ns=1,SIZE(b%src)
+          WRITE(numstr, '(A,I0,A,I0,A,I0,A,A,A)') '-wl', wlindex, '-s', ns, '-d', dindex, '-', TRIM(ADJUSTL(tag)), '-sh'
+          
+          CALL write_data(TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-ex-re.dat', REAL(ef(1,ns,:,:),KIND=dp))
+          CALL write_data(TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-ey-re.dat', REAL(ef(2,ns,:,:),KIND=dp))
+          CALL write_data(TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-ez-re.dat', REAL(ef(3,ns,:,:),KIND=dp))
+          
+          CALL write_data(TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-ex-im.dat', AIMAG(ef(1,ns,:,:)))
+          CALL write_data(TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-ey-im.dat', AIMAG(ef(2,ns,:,:)))
+          CALL write_data(TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-ez-im.dat', AIMAG(ef(3,ns,:,:)))
+          
+          CALL write_data(TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-hx-re.dat', REAL(hf(1,ns,:,:),KIND=dp))
+          CALL write_data(TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-hy-re.dat', REAL(hf(2,ns,:,:),KIND=dp))
+          CALL write_data(TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-hz-re.dat', REAL(hf(3,ns,:,:),KIND=dp))
+          
+          CALL write_data(TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-hx-im.dat', AIMAG(hf(1,ns,:,:)))
+          CALL write_data(TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-hy-im.dat', AIMAG(hf(2,ns,:,:)))
+          CALL write_data(TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-hz-im.dat', AIMAG(hf(3,ns,:,:)))
+       END DO
+    END IF
+
+    DEALLOCATE(ef, hf)
+
+  END SUBROUTINE read_nfpl
 
   SUBROUTINE read_test(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
@@ -1059,6 +1219,52 @@ CONTAINS
 
   END SUBROUTINE read_rcs2
 
+  ! Compute RCS by integrating over boundaries of a selected domain.
+  SUBROUTINE read_rcs3(line, b)
+    CHARACTER (LEN=*), INTENT(IN) :: line
+    TYPE(batch), INTENT(INOUT) :: b
+    INTEGER :: iovar, ntheta_rcs, nphi_rcs, wlindex, srcindex, dindex
+    REAL (KIND=dp) :: omega
+    COMPLEX (KIND=dp) :: ri
+    REAL (KIND=dp), DIMENSION(:,:), ALLOCATABLE :: rcsdata
+    CHARACTER (LEN=256) :: oname, numstr
+
+    READ(line,*) wlindex, srcindex, dindex, ntheta_rcs, nphi_rcs
+
+    WRITE(*,*) 'Computing radar cross-sections'
+    CALL timer_start()
+
+    ALLOCATE(rcsdata(1:ntheta_rcs,1:nphi_rcs))
+
+    WRITE(numstr, '(A,I0,A,I0)') '-wl', wlindex, '-s', srcindex
+    oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '.rcs'
+
+    omega = 2.0_dp*pi*c0/b%sols(wlindex)%wl
+    ri = b%media(b%domains(dindex)%medium_index)%prop(wlindex)%ri
+
+    CALL rcs(b%domains(dindex)%mesh, b%mesh%nedges, omega, ri, b%ga, b%sols(wlindex)%x(:,:,srcindex),&
+         ntheta_rcs, nphi_rcs, b%qd_tri, rcsdata)
+    CALL write_data(oname, rcsdata)
+
+    ! Nonlinear radar cross-sections.
+    IF(ALLOCATED(b%sols(wlindex)%nlx)) THEN
+       oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-sh.rcs'
+       
+       ! Second-harmonic frequency.
+       ri = b%media(b%domains(dindex)%medium_index)%prop(wlindex)%shri
+       
+       CALL rcs(b%domains(dindex)%mesh, b%mesh%nedges, 2.0_dp*omega, ri, b%ga,&
+            b%sols(wlindex)%nlx(:,:,srcindex), ntheta_rcs, nphi_rcs, b%qd_tri, rcsdata)
+       CALL write_data(oname, rcsdata)
+
+    END IF
+
+    DEALLOCATE(rcsdata)
+
+    WRITE(*,*) sec_to_str(timer_end())
+
+  END SUBROUTINE read_rcs3
+
   SUBROUTINE read_rcst(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
@@ -1383,10 +1589,14 @@ CONTAINS
           CALL read_nfem(line, b)
        ELSE IF(scmd=='nfst') THEN
           CALL read_nfst(line, b)
+       ELSE IF(scmd=='nfpl') THEN
+          CALL read_nfpl(line, b)
        ELSE IF(scmd=='rcst') THEN
           CALL read_rcst(line, b)
        ELSE IF(scmd=='rcs2') THEN
           CALL read_rcs2(line, b)
+       ELSE IF(scmd=='rcs3') THEN
+          CALL read_rcs3(line, b)
        ELSE IF(scmd=='crst') THEN
           CALL read_crst(line, b)
        ELSE IF(scmd=='diff') THEN

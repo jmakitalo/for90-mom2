@@ -313,6 +313,62 @@ CONTAINS
 
   END SUBROUTINE field_external_mesh
 
+  SUBROUTINE field_plane(mesh, nedgestot, x, ga, omega, ri, prd, addsrc, src, qd, origin, v1, v2,&
+       n1, n2, ef, hf)
+    TYPE(mesh_container), INTENT(IN) :: mesh
+    REAL (KIND=dp), INTENT(IN) :: omega
+    REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: v1, v2, origin
+    COMPLEX (KIND=dp), DIMENSION(:,:,:), INTENT(IN) :: x
+    TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
+    INTEGER, INTENT(IN) :: nedgestot, n1, n2
+    COMPLEX (KIND=dp), INTENT(IN) :: ri
+    LOGICAL, INTENT(IN) :: addsrc
+    TYPE(prdnfo), POINTER, INTENT(IN) :: prd
+    TYPE(srcdata), DIMENSION(:), INTENT(IN) :: src
+    TYPE(quad_data), INTENT(IN) :: qd
+
+    INTEGER :: n, m, ns
+    COMPLEX (KIND=dp), DIMENSION(3,SIZE(src),n2,n1) :: ef, hf
+    COMPLEX (KIND=dp), DIMENSION(3) :: einc, hinc, v1n, v2n, v3n
+    REAL (KIND=dp), DIMENSION(3) :: pt
+
+    v1n = v1/normr(v1)
+    v2n = v2/normr(v2)
+    v3n = crossc(v1n, v2n)
+
+    !$OMP PARALLEL DEFAULT(NONE)&
+    !$OMP SHARED(origin,n1,n2,v1,v2,mesh,ga,x,nedgestot,omega,ri,prd,qd,addsrc,ef,hf,src,v1n,v2n,v3n)&
+    !$OMP PRIVATE(n,m,pt,ns,einc,hinc)
+    !$OMP DO SCHEDULE(STATIC)
+    DO n=1,n1
+       DO m=1,n2
+          pt = origin + REAL(n-1,KIND=dp)/(n1-1)*v1 + REAL(m-1,KIND=dp)/(n2-1)*v2
+          
+          CALL scat_fields(mesh, ga, x, nedgestot,&
+               omega, ri, prd, pt, qd, ef(:,:,m,n), hf(:,:,m,n))
+          
+          IF(addsrc) THEN
+             DO ns=1,SIZE(src)
+                CALL src_fields(src(ns), omega, ri, pt, einc, hinc)
+                
+                ef(:,ns,m,n) = ef(:,ns,m,n) + einc
+                hf(:,ns,m,n) = hf(:,ns,m,n) + hinc                
+             END DO
+          END IF
+
+          ! Map from the canonical basis of R^3 to (v1n,v2n,v3n) basis.
+          DO ns=1,SIZE(src)
+             ef(:,ns,m,n) = (/dotc(v1n,ef(:,ns,m,n)), dotc(v2n,ef(:,ns,m,n)), dotc(v3n,ef(:,ns,m,n))/)
+             hf(:,ns,m,n) = (/dotc(v1n,hf(:,ns,m,n)), dotc(v2n,hf(:,ns,m,n)), dotc(v3n,hf(:,ns,m,n))/)
+          END DO
+
+       END DO
+    END DO
+    !$OMP END DO
+    !$OMP END PARALLEL
+
+  END SUBROUTINE field_plane
+
   SUBROUTINE gradPnls_mesh(name, mesh, scale, nedgestot, x, ga, omega, ri, qd)
     CHARACTER (LEN=*), INTENT(IN) :: name
     TYPE(mesh_container), INTENT(IN) :: mesh

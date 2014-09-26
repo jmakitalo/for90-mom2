@@ -221,12 +221,15 @@ CONTAINS
 
        poldir = rotate_vector(poldir, dir, polangle)
 
+       WRITE(*,*) poldir
+
        e = dotc(CMPLX(poldir,KIND=dp), e)*poldir
        h = dotc(CMPLX(crossr(dir, poldir),KIND=dp), h)*crossr(dir, poldir)
     END IF
     
     ! The relative irradiance diffracted to 0th order in the given domain.
     irr = dotr(REAL(crossc(e, CONJG(h)), KIND=dp), dir)/pinc
+    !irr = normc(crossc(CMPLX(dir,KIND=dp),e))*k/(omega*mu0*pinc)
 
   END FUNCTION diff_irradiance
 
@@ -234,7 +237,7 @@ CONTAINS
        z0, zsign, qd) RESULT(power)
     TYPE(mesh_container), INTENT(IN) :: mesh
     LOGICAL, INTENT(IN) :: addsrc
-    TYPE(srcdata), INTENT(IN) :: src
+    TYPE(srcdata), DIMENSION(:), INTENT(IN) :: src
     COMPLEX (KIND=dp), INTENT(IN) :: ri, ri_inc
     REAL (KIND=dp), INTENT(IN) :: omega
     TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
@@ -244,14 +247,14 @@ CONTAINS
     REAL (KIND=dp), INTENT(IN) :: z0, zsign
     TYPE(quad_data), INTENT(IN) :: qd
 
-    REAL (KIND=dp) :: power
+    REAL (KIND=dp), DIMENSION(SIZE(src)) :: power
     REAL (KIND=dp), DIMENSION(:), ALLOCATABLE :: qwx, ptx, qwy, pty
-    COMPLEX (KIND=dp), DIMENSION(3,1) :: e, h
+    COMPLEX (KIND=dp), DIMENSION(3,SIZE(src)) :: e, h
     COMPLEX (KIND=dp), DIMENSION(3) :: einc, hinc, poynting
     COMPLEX (KIND=dp) :: k
     REAL (KIND=dp), DIMENSION(3) :: pt
     REAL (KIND=dp) :: hdx, hdy, pinc
-    INTEGER :: n, m, nx, ny
+    INTEGER :: n, m, nx, ny, nsrc
     REAL (KIND=dp), DIMENSION(3) :: xaxis, yaxis
 
     ! Wavenumber in diffraction medium.
@@ -286,13 +289,12 @@ CONTAINS
     CALL get_simpsons_weights(-hdy, hdy, ny-1, qwy)
     CALL get_simpsons_points(-hdy, hdy, ny-1, pty)
 
-    power = 0.0_dp
+    power(:) = 0.0_dp
 
-             
-    !$OMP PARALLEL DEFAULT(NONE)&
-    !$OMP SHARED(ny,nx,z0,xaxis,yaxis,ptx,pty,mesh,ga,x,nedgestot,omega,ri,prd,addsrc,src,qwx,qwy,zsign,power,qd)&
-    !$OMP PRIVATE(m,n,pt,einc,hinc,e,h,poynting)
-    !$OMP DO REDUCTION(+:power) SCHEDULE(STATIC)
+!    !$OMP PARALLEL DEFAULT(NONE)&
+!    !$OMP SHARED(ny,nx,z0,xaxis,yaxis,ptx,pty,mesh,ga,x,nedgestot,omega,ri,prd,addsrc,src,qwx,qwy,zsign,power,qd)&
+!    !$OMP PRIVATE(m,n,pt,einc,hinc,e,h,poynting,nsrc)
+!    !$OMP DO REDUCTION(+:power) SCHEDULE(STATIC)
     DO m=1,ny
        DO n=1,nx
 
@@ -300,28 +302,30 @@ CONTAINS
           
           CALL scat_fields(mesh, ga, x, nedgestot, omega, ri, prd, pt, qd, e, h)
 
-          IF(addsrc) THEN
-             CALL src_fields(src, omega, ri, pt, einc, hinc)
-
-             e(:,1) = e(:,1) + einc
-             h(:,1) = h(:,1) + hinc
-          END IF
-
-          poynting = crossc(e(:,1), CONJG(h(:,1)))
-
-          power = power + 0.5_dp*qwx(n)*qwy(m)*REAL(poynting(3)*zsign)
+          DO nsrc=1,SIZE(src)
+             IF(addsrc) THEN
+                CALL src_fields(src(nsrc), omega, ri, pt, einc, hinc)
+                
+                e(:,nsrc) = e(:,nsrc) + einc
+                h(:,nsrc) = h(:,nsrc) + hinc
+             END IF
+             
+             poynting = crossc(e(:,nsrc), CONJG(h(:,nsrc)))
+             
+             power(nsrc) = power(nsrc) + 0.5_dp*qwx(n)*qwy(m)*REAL(poynting(3)*zsign)
+          END DO
        END DO
     END DO
-    !$OMP END DO
-    !$OMP END PARALLEL
+!    !$OMP END DO
+!    !$OMP END PARALLEL
         
     ! cp is the Jacobian of the area integration.
-    power = power*prd%cp
+    power(:) = power(:)*prd%cp
 
     pinc = 0.5_dp*prd%dx*prd%dy*prd%cp*REAL(ri_inc,KIND=dp)/(c0*mu0)
     
     ! Relative power.
-    power = power/pinc
+    power(:) = power(:)/pinc
 
     DEALLOCATE(qwx, ptx, qwy, pty)
 

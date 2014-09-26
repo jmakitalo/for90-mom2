@@ -6,7 +6,13 @@ MODULE nlbulk
   TYPE medium_nlb
      COMPLEX (KIND=dp) :: delta_prime
      COMPLEX (KIND=dp) :: gamma
-     COMPLEX (KIND=dp) :: chi2zzz
+     !COMPLEX (KIND=dp) :: chi2zzz ! deprecated
+
+     ! Maps (Ex**2,Ey**2,Ez**2,EyEz,ExEz,ExEy) to (Px,Py,Pz) in crystal frame.
+     COMPLEX (KIND=dp), DIMENSION(3,6) :: chi2
+
+     ! T maps from crystal frame to lab frame. invT = inverse(T).
+     REAL (KIND=dp), DIMENSION(3,3) :: T, invT
   END type medium_nlb
 
 CONTAINS
@@ -23,6 +29,7 @@ CONTAINS
     TYPE(quad_data), INTENT(IN) :: qd
 
     COMPLEX (KIND=dp), DIMENSION(3,SIZE(ga),SIZE(x,3)) :: Pnlb, e, h
+    COMPLEX (KIND=dp), DIMENSION(3) :: e2, Pnlb2
     COMPLEX (KIND=dp) :: Pnlbz
     INTEGER :: na, ns
 
@@ -30,9 +37,18 @@ CONTAINS
 
     DO na=1,SIZE(ga)
        DO ns=1,SIZE(x,3)
-          Pnlbz = eps0*(nlb%chi2zzz)*(e(3,na,ns)**2)
-          
-          Pnlb(:,na,ns) = (/0.0_dp, 0.0_dp, 1.0_dp/)*Pnlbz
+          ! Map e from lab frame to crystal frame.
+          e2 = MATMUL(nlb%invT, e(:,na,ns))
+
+          ! Compute polarization in crystal frame.
+          Pnlb2 = eps0*MATMUL(nlb%chi2, (/e2(1)**2, e2(2)**2, e2(3)**2,&
+               e2(2)*e2(3), e2(1)*e2(3), e2(1)*e2(2)/))
+
+          ! Map Pnlb to lab frame.
+          Pnlb(:,na,ns) = MATMUL(nlb%T, Pnlb2)
+
+          !Pnlbz = eps0*(nlb%chi2zzz)*(e(3,na,ns)**2)
+          !Pnlb(:,na,ns) = (/0.0_dp, 0.0_dp, 1.0_dp/)*Pnlbz
        END DO
     END DO
   END FUNCTION Pnlb_dipole_ga
