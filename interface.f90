@@ -10,6 +10,7 @@ MODULE interface
   USE ffields
   USE cs
   USE nfpost
+  USE solver_vie
 
   IMPLICIT NONE
 
@@ -1503,6 +1504,72 @@ CONTAINS
     END IF
   END SUBROUTINE read_csca
 
+  SUBROUTINE read_vext(line, b)
+    CHARACTER (LEN=*), INTENT(IN) :: line
+    TYPE(batch), INTENT(INOUT) :: b
+    INTEGER :: fid=10, iovar, n, ns
+    REAL (KIND=dp) :: cext, wl
+    REAL (KIND=dp), DIMENSION(b%nwl,2) :: data
+    REAL (KIND=dp) :: omega
+    COMPLEX (KIND=dp) :: ri, k
+    TYPE(srcdata) :: nlsrc
+    CHARACTER (LEN=256) :: oname, numstr
+    TYPE(prdnfo), POINTER :: prd
+
+    WRITE(*,*) 'Computing extinction cross-section from VIE solution'
+
+    prd => NULL()
+
+    ! Consider all excitation sources.
+    DO ns=1,SIZE(b%src)
+
+!       !$OMP PARALLEL DEFAULT(NONE)&
+!       !$OMP SHARED(b,data,ns,prd)&
+!       !$OMP PRIVATE(n,omega,ri,k,wl,cext)
+!       !$OMP DO SCHEDULE(STATIC)
+       DO n=1,b%nwl
+          wl = b%sols(n)%wl
+          
+          omega = 2.0_dp*pi*c0/wl
+          ri = b%media(b%domains(1)%medium_index)%prop(n)%ri
+          k = ri*omega/c0
+
+          cext = cext_vie(b%mesh, k, b%ga(1), prd, b%qd_tetra, xi_hom,&
+               b%sols(n)%x(:,1,ns), b%src(ns))
+          
+          data(n,1) = wl
+          data(n,2) = cext
+          
+          WRITE(*,'(A,I0,A,I0,:)') ' Wavelength ',  n, ' of ', b%nwl
+       END DO
+!       !$OMP END DO
+!       !$OMP END PARALLEL
+
+       WRITE(numstr, '(A,I0)') '-s', ns
+       oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '.crs'
+       
+       CALL write_data(oname, data)
+    END DO
+
+  CONTAINS
+    FUNCTION xi_hom(pos, s) RESULT(xires)
+      DOUBLE PRECISION, DIMENSION(3), INTENT(IN) :: pos
+      INTEGER, INTENT(IN) :: s
+      COMPLEX (KIND=dp) :: eps, diag
+      COMPLEX, DIMENSION(3,3) :: xires
+
+      eps = b%media(b%domains(2)%medium_index)%prop(n)%ri**2
+      diag = 1.0_dp - 1.0_dp/eps
+
+      xires(:,:) = 0.0_dp
+
+      xires(1,1) = diag
+      xires(2,2) = diag
+      xires(3,3) = diag
+    END FUNCTION xi_hom
+
+  END SUBROUTINE read_vext
+
   SUBROUTINE test()
     COMPLEX (KIND=dp) :: res
 
@@ -1613,6 +1680,10 @@ CONTAINS
           CALL read_csca(line, b)
        ELSE IF(scmd=='test') THEN
           CALL read_test(line, b)
+       ELSE IF(scmd=='vsol') THEN
+          CALL solve_batch_vie(b)
+       ELSE IF(scmd=='vext') THEN
+          CALL read_vext(line, b)
        ELSE
           WRITE(*,*) 'Unrecognized command ', scmd, '!'
        END IF

@@ -2,8 +2,9 @@
 OBJECTS=amos.o constants.o common.o linalg.o int.o mesh.o main.o green.o rwgf.o quad.o source.o \
 	time.o srcint.o bessel.o greenprd.o symmetry.o aux.o sysmat.o solver.o \
 	interface.o nfields.o diffr.o bc.o ffields.o cs.o nlsurf.o dipole.o nlbulk.o \
-	nfpost.o strat.o
+	nfpost.o strat.o vie.o solver_vie.o
 COMPILER=ifort -fpp -openmp -parallel -diag-disable 8291 -O2 -vec-report1
+#COMPILER=ifort -diag-disable 8291 -vec-report1 -g
 #COMPILER=ifort -diag-disable 8291 -vec-report1 -pg
 
 mom: $(OBJECTS)
@@ -67,7 +68,7 @@ bc.o: bc.f90 symmetry.f90 symmetry.o mesh.f90 mesh.o
 solver.o: solver.f90 sysmat.f90 sysmat.o source.f90 source.o bc.f90 bc.o time.f90 time.o
 	$(COMPILER) -c solver.f90
 
-interface.o: interface.f90 solver.f90 solver.o diffr.f90 diffr.o ffields.f90 ffields.o cs.f90 cs.o nfpost.f90 nfpost.o
+interface.o: interface.f90 solver.f90 solver.o diffr.f90 diffr.o ffields.f90 ffields.o cs.f90 cs.o nfpost.f90 nfpost.o solver_vie.f90 solver_vie.o
 	$(COMPILER) -c interface.f90
 
 nfields.o: nfields.f90 srcint.f90 srcint.o
@@ -99,6 +100,12 @@ strat.o: strat.f90
 
 amos.o: amos.f
 	$(COMPILER) -c amos.f
+
+vie.o: vie.f90 rwgf.f90 rwgf.o quad.f90 quad.o green.f90 green.o greenprd.f90 greenprd.o symmetry.f90 symmetry.o
+	$(COMPILER) -c vie.f90
+
+solver_vie.o: solver_vie.f90 vie.f90 vie.o time.f90 time.o common.f90 common.o
+	$(COMPILER) -c solver_vie.f90
 
 clean:
 	rm *.o *.mod

@@ -76,6 +76,32 @@ CONTAINS
     END IF
   END SUBROUTINE vrwg
 
+  SUBROUTINE vsolid_rwg(r, solidind, faceind, mesh, res)
+    REAL (KIND=dp), DIMENSION(:,:), INTENT(IN) :: r
+    INTEGER, INTENT(IN) :: solidind, faceind
+    TYPE(mesh_container), INTENT(IN) :: mesh
+    REAL (KIND=dp), DIMENSION(3) :: v
+    REAL (KIND=dp), DIMENSION(SIZE(r,1),SIZE(r,2)), INTENT(INOUT) :: res
+    REAL (KIND=dp) :: A, vol
+
+    A = mesh%solid_faces(mesh%solids(solidind)%solid_face_indices(faceind))%area
+    vol = mesh%solids(solidind)%volume
+
+    IF(get_solid_face_sign(solidind, faceind, mesh)>0) THEN
+       v = get_posit_solid_bnode(solidind, faceind, mesh)
+       res(1,:) = A/(3.0_dp*vol)*(r(1,:)-v(1))
+       res(2,:) = A/(3.0_dp*vol)*(r(2,:)-v(2))
+       res(3,:) = A/(3.0_dp*vol)*(r(3,:)-v(3))
+    ELSE IF(get_solid_face_sign(solidind, faceind, mesh)<0) THEN
+       v = get_negat_solid_bnode(solidind, faceind, mesh)
+       res(1,:) = A/(3.0_dp*vol)*(v(1)-r(1,:))
+       res(2,:) = A/(3.0_dp*vol)*(v(2)-r(2,:))
+       res(3,:) = A/(3.0_dp*vol)*(v(3)-r(3,:))
+    ELSE
+       WRITE(*,*) 'Invalid evaluation of solid RWG function!'
+    END IF
+  END SUBROUTINE vsolid_rwg
+
   FUNCTION solid_rwg(r, solidind, faceind, mesh) RESULT(res)
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r
     INTEGER, INTENT(IN) :: solidind, faceind
