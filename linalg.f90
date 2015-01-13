@@ -179,11 +179,58 @@ CONTAINS
     END IF
   END SUBROUTINE solve_multi_linsys
 
-  SUBROUTINE matrix_eigenvalues(A, eigval, eigvec)
-    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: A
+  ! Generalized eigenvectors v and eigenvalues l of Av = lBv.
+  ! Overwrites matrices A and B.
+  SUBROUTINE matrix_eigenvalues_gen(A, B, eigval, eigvec)
+    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(INOUT) :: A, B
     COMPLEX (KIND=dp), DIMENSION(:), INTENT(INOUT) :: eigval
     COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(INOUT) :: eigvec
-    COMPLEX (KIND=dp), DIMENSION(SIZE(eigvec,1),SIZE(eigvec,2)) :: VL
+    COMPLEX (KIND=dp), DIMENSION(1,SIZE(A,2)) :: VL
+    INTEGER :: dim
+    INTEGER :: INFO, LWORK
+    COMPLEX (KIND=dp), DIMENSION(:), ALLOCATABLE :: WORK
+    REAL (KIND=dp), DIMENSION(:), ALLOCATABLE :: RWORK
+    COMPLEX (KIND=dp), DIMENSION(:), ALLOCATABLE :: alpha, beta
+
+    dim = SIZE(A,1)
+
+    ALLOCATE(alpha(1:dim), beta(1:dim))
+    LWORK = 2*dim
+    ALLOCATE(WORK(1:LWORK), RWORK(1:(8*dim)))
+
+    ! Query workspace.
+    CALL ZGGEV('N', 'V', dim, A, dim, B, dim, alpha, beta, VL, 1, eigvec, dim, WORK, -1, RWORK, INFO)
+
+    IF(INFO/=0) THEN
+       WRITE(*,*) 'Matrix eigenvalue solution was unsuccessful!'
+       IF(INFO<0) THEN
+          WRITE(*,*) 'Argument ', -INFO, ' was illegal.'
+       END IF
+    END IF
+
+    LWORK = WORK(1)
+    DEALLOCATE(WORK)
+    ALLOCATE(WORK(1:LWORK))
+
+    CALL ZGGEV('N', 'V', dim, A, dim, B, dim, alpha, beta, VL, 1, eigvec, dim, WORK, LWORK, RWORK, INFO)
+
+    IF(INFO/=0) THEN
+       WRITE(*,*) 'Matrix eigenvalue solution was unsuccessful!'
+       IF(INFO<0) THEN
+          WRITE(*,*) 'Argument ', -INFO, ' was illegal.'
+       END IF
+    END IF
+
+    eigval = alpha/beta
+
+    DEALLOCATE(WORK, RWORK, alpha, beta)
+  END SUBROUTINE matrix_eigenvalues_gen
+
+  SUBROUTINE matrix_eigenvalues(A, eigval, eigvec)
+    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(INOUT) :: A
+    COMPLEX (KIND=dp), DIMENSION(:), INTENT(INOUT) :: eigval
+    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(INOUT) :: eigvec
+    COMPLEX (KIND=dp), DIMENSION(:,:), ALLOCATABLE :: VL
     INTEGER :: dim
     INTEGER :: INFO, LWORK
     COMPLEX (KIND=dp), DIMENSION(:), ALLOCATABLE :: WORK
@@ -192,7 +239,7 @@ CONTAINS
     dim = SIZE(A,1)
 
     LWORK = 2*dim
-    ALLOCATE(WORK(1:LWORK), RWORK(1:(2*dim)))
+    ALLOCATE(WORK(1:LWORK), RWORK(1:(2*dim)), VL(1:dim,1:dim))
 
     ! Query workspace.
     CALL ZGEEV('N', 'V', dim, A, dim, eigval, VL, 1, eigvec, dim, WORK, -1, RWORK, INFO)
@@ -222,7 +269,7 @@ CONTAINS
        STOP
     END IF
 
-    DEALLOCATE(WORK, RWORK)
+    DEALLOCATE(WORK, RWORK, VL)
 
   END SUBROUTINE matrix_eigenvalues
 

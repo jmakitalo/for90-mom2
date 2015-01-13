@@ -2,15 +2,15 @@
 OBJECTS=amos.o constants.o common.o linalg.o int.o mesh.o main.o green.o rwgf.o quad.o source.o \
 	time.o srcint.o bessel.o greenprd.o symmetry.o aux.o sysmat.o solver.o \
 	interface.o nfields.o diffr.o bc.o ffields.o cs.o nlsurf.o dipole.o nlbulk.o \
-	nfpost.o strat.o vie.o solver_vie.o
+	nfpost.o strat.o vie.o solver_vie.o pec.o
 COMPILER=ifort -fpp -openmp -parallel -diag-disable 8291 -O2 -vec-report1
-#COMPILER=ifort -diag-disable 8291 -vec-report1 -g
+#COMPILER=ifort -diag-disable 8291 -vec-report1 -g #debug
 #COMPILER=ifort -diag-disable 8291 -vec-report1 -pg
 
 mom: $(OBJECTS)
 	$(COMPILER) $(OBJECTS) -o bin/mom -mkl
 
-main.o: main.f90 interface.f90 interface.o
+main.o: main.f90 interface.f90 interface.o pec.f90 pec.o
 	$(COMPILER) -c main.f90
 
 constants.o: constants.f90
@@ -106,6 +106,9 @@ vie.o: vie.f90 rwgf.f90 rwgf.o quad.f90 quad.o green.f90 green.o greenprd.f90 gr
 
 solver_vie.o: solver_vie.f90 vie.f90 vie.o time.f90 time.o common.f90 common.o
 	$(COMPILER) -c solver_vie.f90
+
+pec.o: pec.f90 sysmat.o sysmat.f90
+	$(COMPILER) -c pec.f90
 
 clean:
 	rm *.o *.mod

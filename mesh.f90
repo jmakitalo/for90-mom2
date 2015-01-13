@@ -583,7 +583,7 @@ CONTAINS
 
     OPEN(fid, FILE=TRIM(filename), ACTION='READ', IOSTAT=iovar)
     IF(iovar>0) THEN
-       WRITE(*,*) 'Could not open mesh file!'
+       WRITE(*,*) 'Could not open mesh file ', TRIM(filename), '!'
        STOP
     END IF
 

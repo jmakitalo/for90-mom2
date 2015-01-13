@@ -187,6 +187,135 @@ CONTAINS
     CALL vieIdMatrix(mesh, k, ga, prd, qd_tetra, xi, A)
   END SUBROUTINE vie_matrix
 
+  SUBROUTINE vie_eigen(mesh, k, qd_tri, qd_tetra, epsr)
+    TYPE(mesh_container), INTENT(IN) :: mesh
+    COMPLEX (KIND=dp), INTENT(IN) :: k
+    TYPE(quad_data), INTENT(IN) :: qd_tri, qd_tetra
+    COMPLEX (KIND=dp), DIMENSION(:), INTENT(INOUT) :: epsr
+
+    COMPLEX (KIND=dp), DIMENSION(:,:), ALLOCATABLE :: A, idmat, idmatInv, eigvec
+    COMPLEX (KIND=dp), DIMENSION(:), ALLOCATABLE :: eigval
+    INTEGER, DIMENSION(SIZE(epsr)) :: minind
+    TYPE(quad_data) :: qd_tetra_test
+    INTEGER :: dim
+    TYPE(prdnfo), POINTER :: prd
+    TYPE(group_action), DIMENSION(:), ALLOCATABLE :: ga
+
+    CALL group_id(ga)
+
+    prd => NULL()
+
+    dim = mesh%nsolid_faces
+
+    qd_tetra_test = tetra_quad_data('tetra_gl4')
+
+    ALLOCATE(A(1:dim,1:dim), idmat(1:dim, 1:dim), idmatInv(1:dim, 1:dim))
+
+    ! Declare matrix to zero.
+    A(:,:) = 0.0_dp
+
+    WRITE(*,*) 'Computing matrices'
+
+    ! Add Green operator elements.
+    CALL vieGreenMatrix(mesh, k, ga(1), prd, qd_tri, qd_tetra, qd_tetra_test, .TRUE., xi_id, A)
+
+    CALL delete_quad_data(qd_tetra_test)
+
+    idmat(:,:) = 0.0_dp
+
+    ! Add identity operator elements.
+    CALL vieIdMatrix(mesh, k, ga(1), prd, qd_tetra, xi_zero, idmat)
+
+    ALLOCATE(eigvec(1:dim,1:dim), eigval(1:dim))
+
+
+    WRITE(*,*) 'Computing eigenvalues'
+
+    !CALL matrix_eigenvalues_gen(A, idmat, eigval, eigvec)
+    CALL matrix_inverse(idmat, idmatInv)
+    A = MATMUL(idmatInv, A)
+    CALL matrix_eigenvalues(A, eigval, eigvec)
+
+    ! eigval to epsr
+    !eigval = 1.0_dp/eigval(:) + 1.0_dp
+    !minind = find_smallest(eigval, dim, SIZE(epsr))
+    !epsr = eigval(minind(:))
+    epsr = 1.0_dp/eigval(:) + 1.0_dp
+
+    DEALLOCATE(A, idmat, idmatInv, eigvec, eigval, ga)
+
+  CONTAINS
+    FUNCTION xi_id(pos, s) RESULT(xires)
+      DOUBLE PRECISION, DIMENSION(3), INTENT(IN) :: pos
+      INTEGER, INTENT(IN) :: s
+      COMPLEX (KIND=dp) :: eps, diag
+      COMPLEX, DIMENSION(3,3) :: xires
+
+      diag = 1.0_dp
+
+      xires(:,:) = 0.0_dp
+
+      xires(1,1) = diag
+      xires(2,2) = diag
+      xires(3,3) = diag
+    END FUNCTION xi_id
+
+    FUNCTION xi_zero(pos, s) RESULT(xires)
+      DOUBLE PRECISION, DIMENSION(3), INTENT(IN) :: pos
+      INTEGER, INTENT(IN) :: s
+      COMPLEX, DIMENSION(3,3) :: xires
+
+      xires(:,:) = 0.0_dp
+    END FUNCTION xi_zero
+
+  END SUBROUTINE vie_eigen
+
+  SUBROUTINE vie_eigen_spec()
+    REAL (KIND=dp) :: scale, omega1, omega2, omega, t
+    TYPE(quad_data) :: qd_tri, qd_tetra
+    TYPE(mesh_container) :: mesh
+    INTEGER :: nepsr, n
+    COMPLEX (KIND=dp) :: k
+    COMPLEX (KIND=dp), DIMENSION(:), ALLOCATABLE :: epsr
+    REAL (KIND=dp), DIMENSION(:,:), ALLOCATABLE :: data_re, data_im
+
+    scale = 10D-9
+
+    mesh = load_mesh('sphere.msh')
+    
+    CALL build_mesh(mesh, scale)
+
+    IF(mesh%nsolid_faces==0) THEN
+       CALL build_solid_faces(mesh)
+       CALL compute_basis_data(mesh)
+    END IF
+
+    ! Quadrature rules.
+    qd_tri = tri_quad_data('tri_gl4')
+    qd_tetra = tetra_quad_data('tetra_gl1')
+
+    nepsr = mesh%nsolid_faces
+    omega = 2*pi*c0/6D-7
+
+    ALLOCATE(epsr(1:nepsr), data_re(1:nepsr,1), data_im(1:nepsr,1))
+
+    k = omega/c0
+    
+    CALL vie_eigen(mesh, k, qd_tri, qd_tetra, epsr)
+
+    data_re(:,1) = REAL(epsr,KIND=dp)
+    data_im(:,1) = AIMAG(epsr)
+
+    CALL delete_quad_data(qd_tri)
+    CALL delete_quad_data(qd_tetra)
+    CALL delete_mesh(mesh)
+
+    CALL write_data('epsr_re.dat', data_re)
+    CALL write_data('epsr_im.dat', data_im)
+
+    DEALLOCATE(epsr, data_re, data_im)
+  END SUBROUTINE vie_eigen_spec
+
   SUBROUTINE vie_srcvec(mesh, omega, ri, ga, qd_tetra, src, b)
     TYPE(mesh_container), INTENT(IN) :: mesh
     REAL (KIND=dp), INTENT(IN) :: omega

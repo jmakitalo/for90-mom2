@@ -8,6 +8,28 @@ MODULE aux
   IMPLICIT NONE
 
 CONTAINS
+  FUNCTION find_smallest(val, dim, nval) RESULT(ind)
+    COMPLEX (KIND=dp), DIMENSION(:), INTENT(IN) :: val
+    INTEGER, INTENT(IN) :: dim, nval
+
+    INTEGER, DIMENSION(nval) :: ind
+    COMPLEX (KIND=dp), DIMENSION(dim) :: tmpval
+    INTEGER :: n
+    INTEGER, DIMENSION(1) :: loc
+    REAL (KIND=dp) :: mval
+
+    tmpval(:) = val(:)
+
+    mval = MAXVAL(ABS(val))
+
+    DO n=1,nval
+       loc = MINLOC(ABS(tmpval))
+       tmpval(loc(1)) = mval
+
+       ind(n) = loc(1)
+    END DO
+  END FUNCTION find_smallest
+
   FUNCTION getext(filename) RESULT(ext)
     CHARACTER (LEN=*), INTENT(IN) :: filename
     CHARACTER (LEN=3) :: ext

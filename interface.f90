@@ -439,6 +439,23 @@ CONTAINS
 
   END SUBROUTINE read_scan_source
 
+  SUBROUTINE read_move_source(line, b)
+    CHARACTER (LEN=*), INTENT(IN) :: line
+    TYPE(batch), INTENT(INOUT) :: b
+    INTEGER :: index
+    REAL (KIND=dp), DIMENSION(3) :: pos
+    TYPE(srcdata) :: src
+
+    IF(ALLOCATED(b%src)==.FALSE.) THEN
+       WRITE(*,*) 'Source must be setup before specifying move transform!'
+       STOP
+    END IF
+
+    READ(line,*) index, pos(1:3)
+
+    b%src(index)%pos = pos
+  END SUBROUTINE read_move_source
+
   ! Allocate source definitions.
   SUBROUTINE read_nsrc(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
@@ -1684,6 +1701,10 @@ CONTAINS
           CALL solve_batch_vie(b)
        ELSE IF(scmd=='vext') THEN
           CALL read_vext(line, b)
+       ELSE IF(scmd=='viem') THEN
+          CALL vie_eigen_spec()
+       ELSe IF(scmd=='msrc') THEN
+          CALL read_move_source(line, b)
        ELSE
           WRITE(*,*) 'Unrecognized command ', scmd, '!'
        END IF
