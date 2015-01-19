@@ -160,14 +160,14 @@ CONTAINS
 
   END SUBROUTINE rcs_solangle_old
 
-  SUBROUTINE rcs_solangle(mesh, nedgestot, omega, ri, ga, x, theta_max, qd, scatp)
+  SUBROUTINE rcs_solangle(mesh, nedgestot, omega, ri, ga, x, theta1, theta2, qd, scatp)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, INTENT(IN) :: nedgestot
     REAL (KIND=dp), INTENT(IN) :: omega
     COMPLEX (KIND=dp), INTENT(IN) :: ri
     TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
     COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: x
-    REAL (KIND=dp), INTENT(IN) :: theta_max
+    REAL (KIND=dp), INTENT(IN) :: theta1, theta2
     TYPE(quad_data), INTENT(IN) :: qd
 
     REAL (KIND=dp), INTENT(OUT) :: scatp
@@ -175,7 +175,7 @@ CONTAINS
     REAL (KIND=dp), PARAMETER :: maxerr = 1D-3
     COMPLEX (KIND=dp) :: scatpz
 
-    CALL asqz2(integ, 0.0_dp, theta_max, 0.0_dp, 2*PI, maxerr, maxDepth, scatpz)
+    CALL asqz2(integ, theta1, theta2, 0.0_dp, 2*PI, maxerr, maxDepth, scatpz)
 
     scatp = REAL(scatpz)
 

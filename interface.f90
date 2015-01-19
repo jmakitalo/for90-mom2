@@ -1176,12 +1176,12 @@ CONTAINS
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
     INTEGER :: iovar, npt, wlindex, n
-    REAL (KIND=dp) :: omega, theta_max
+    REAL (KIND=dp) :: omega, theta1, theta2
     COMPLEX (KIND=dp) :: ri
     REAL (KIND=dp), DIMENSION(SIZE(b%src)) :: scatp
     CHARACTER (LEN=256) :: oname, numstr
 
-    READ(line,*) wlindex
+    READ(line,*) wlindex, theta1, theta2
 
     WRITE(*,*) 'Computing scattered power'
 
@@ -1193,14 +1193,14 @@ CONTAINS
     npt = NINT(SQRT(REAL(SIZE(b%src))))
 
     !$OMP PARALLEL DEFAULT(NONE)&
-    !$OMP SHARED(b,omega,ri,scatp,wlindex)&
-    !$OMP PRIVATE(n,theta_max)
+    !$OMP SHARED(b,omega,ri,scatp,wlindex,theta1,theta2)&
+    !$OMP PRIVATE(n)
     !$OMP DO SCHEDULE(STATIC)
     DO n=1,SIZE(b%src)
-       theta_max = ASIN(b%src(n)%napr/REAL(ri,KIND=dp))
+       !theta_max = ASIN(b%src(n)%napr/REAL(ri,KIND=dp))
 
        CALL rcs_solangle(b%domains(1)%mesh, b%mesh%nedges, omega, ri, b%ga,&
-            b%sols(wlindex)%x(:,:,n), theta_max, b%qd_tri, scatp(n))
+            b%sols(wlindex)%x(:,:,n), theta1, theta2, b%qd_tri, scatp(n))
     END DO
     !$OMP END DO
     !$OMP END PARALLEL
@@ -1217,14 +1217,14 @@ CONTAINS
        ri = b%media(b%domains(1)%medium_index)%prop(wlindex)%shri
 
        !$OMP PARALLEL DEFAULT(NONE)&
-       !$OMP SHARED(b,omega,ri,scatp,wlindex)&
-       !$OMP PRIVATE(n,theta_max)
+       !$OMP SHARED(b,omega,ri,scatp,wlindex,theta1,theta2)&
+       !$OMP PRIVATE(n)
        !$OMP DO SCHEDULE(STATIC)
        DO n=1,SIZE(b%src)
-          theta_max = ASIN(b%src(n)%napr/REAL(ri,KIND=dp))
+          !theta_max = ASIN(b%src(n)%napr/REAL(ri,KIND=dp))
 
           CALL rcs_solangle(b%domains(1)%mesh, b%mesh%nedges, 2.0_dp*omega, ri, b%ga,&
-               b%sols(wlindex)%nlx(:,:,n), theta_max, b%qd_tri, scatp(n))
+               b%sols(wlindex)%nlx(:,:,n), theta1, theta2, b%qd_tri, scatp(n))
        END DO
        !$OMP END DO
        !$OMP END PARALLEL
