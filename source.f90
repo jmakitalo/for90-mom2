@@ -24,7 +24,8 @@ MODULE source
        src_focus_hg01 = 6,&
        src_focus_azim = 7,&
        src_dipole = 8,&
-       src_nlbulk = 9
+       src_nlbulk = 9,&
+       src_pw_elliptic = 10
 
   INTEGER, PARAMETER :: focustype_radial = 1,&
        focustype_x = 2,&
@@ -38,6 +39,9 @@ MODULE source
 
      ! Angles for a plane-wave excitation.
      REAL (KIND=dp) :: theta, phi, psi
+
+     ! Phase factor between Ex and Ey, where (Ex,Ey,k) form a right-handed system.
+     COMPLEX (KIND=dp) :: phase
 
      ! Focused beam excitation parameters.
      REAL (KIND=dp) :: focal, waist, napr
@@ -96,6 +100,30 @@ CONTAINS
     hf = pw_hfield(pol, dir, k, omega, pt)
   END SUBROUTINE pw_fields
 
+  SUBROUTINE pw_fields_elliptic(theta, phi, phase, omega, ri, pt, ef, hf)
+    REAL (KIND=dp), INTENT(IN) :: theta, phi, omega
+    COMPLEX (KIND=dp), INTENT(IN) :: phase, ri
+    REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: pt
+
+    COMPLEX (KIND=dp), DIMENSION(3), INTENT(INOUT) :: ef, hf
+
+    COMPLEX (KIND=dp), DIMENSION(3) :: efx, efy
+    REAL (KIND=dp), DIMENSION(3) :: pol, dir
+    COMPLEX (KIND=dp) :: k
+
+    dir = get_dir(theta, phi)
+    pol = get_pol(theta, phi, 0.0_dp)
+
+    k = ri*omega/c0
+
+    efx = pw_efield(pol, dir, k, pt)
+    efy = crossc(CMPLX(dir,KIND=dp), efx)
+    ef = efx + phase*efy
+    ef = ef/normc(ef)
+
+    hf = k/(omega*mu0)*crossc(CMPLX(dir,KIND=dp), ef)
+  END SUBROUTINE pw_fields_elliptic
+
   ! Source vector <f_m,s> with f_m RWG function and s a specified
   ! source excitation function.
   ! mesh: boundary mesh of the domain where the source is defined in.
@@ -139,7 +167,7 @@ CONTAINS
 
     ! If we have a focused beam, determine its type and compute
     ! maximum electric field value.
-    IF(print_info .AND. src%type/=src_pw) THEN
+    IF(print_info .AND. src%type/=src_pw .AND. src%type/=src_pw_elliptic) THEN
        IF(src%type==src_focus_rad) THEN
           focustype = focustype_radial
        ELSE IF(src%type==src_focus_x) THEN
@@ -256,6 +284,10 @@ CONTAINS
           pt = MATMUL(TRANSPOSE(ga(na)%j), ptin)
           
           CALL pw_fields(src%theta, src%phi, src%psi, omega, ri, pt, ef, hf)
+       ELSE IF(src%type==src_pw_elliptic) THEN
+          pt = MATMUL(TRANSPOSE(ga(na)%j), ptin)
+          
+          CALL pw_fields_elliptic(src%theta, src%phi, src%phase, omega, ri, pt, ef, hf)
        ELSE IF(src%type==src_focus_rad .OR. src%type==src_focus_azim .OR.&
             src%type==src_focus_x .OR. src%type==src_focus_y .OR.&
             src%type==src_focus_hg01) THEN
@@ -310,6 +342,8 @@ CONTAINS
 
     IF(src%type==src_pw) THEN
        CALL pw_fields(src%theta, src%phi, src%psi, omega, ri, pt, einc, hinc)
+    ELSE IF(src%type==src_pw_elliptic) THEN
+       CALL pw_fields_elliptic(src%theta, src%phi, src%phase, omega, ri, pt, einc, hinc)
     ELSE IF(src%type==src_focus_rad .OR. src%type==src_focus_azim .OR.&
          src%type==src_focus_x .OR. src%type==src_focus_y .OR.&
          src%type==src_focus_hg01) THEN
@@ -855,6 +889,11 @@ CONTAINS
        WRITE(*,'(A,T9,F6.2,A)') ' theta: ', src%theta*180/pi, ' deg'
        WRITE(*,'(A,T7,F6.2,A)') ' phi: ', src%phi*180/pi, ' deg'
        WRITE(*,'(A,T7,F6.2,A)') ' psi: ', src%psi*180/pi, ' deg'
+    ELSE IF(src%type==src_pw_elliptic) THEN
+       WRITE(*,*) 'source type: ', 'pw_elliptic'
+       WRITE(*,'(A,T9,F6.2,A)') ' theta: ', src%theta*180/pi, ' deg'
+       WRITE(*,'(A,T7,F6.2,A)') ' phi: ', src%phi*180/pi, ' deg'
+       WRITE(*,'(A,T7,F6.2,A,F6.2,A)') ' phase: (', REAL(src%phase), ', ', AIMAG(src%phase), ')'
     ELSE IF(src%type==src_focus_rad) THEN
        WRITE(*,*) 'source type: ', 'focus_rad'
        WRITE(*,'(A,T16,E9.3)') ' focal length: ', src%focal

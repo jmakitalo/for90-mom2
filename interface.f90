@@ -508,6 +508,11 @@ CONTAINS
        b%src(index)%theta = b%src(index)%theta*degtorad
        b%src(index)%phi = b%src(index)%phi*degtorad
        b%src(index)%psi = b%src(index)%psi*degtorad
+    ELSE IF(token=='pw_elliptic') THEN
+       b%src(index)%type = src_pw_elliptic
+       READ(line,*) index, token, b%src(index)%theta, b%src(index)%phi, b%src(index)%phase
+       b%src(index)%theta = b%src(index)%theta*degtorad
+       b%src(index)%phi = b%src(index)%phi*degtorad
     ELSE IF(token=='focus_rad') THEN
        b%src(index)%type = src_focus_rad
        READ(line,*) index, token, b%src(index)%focal, b%src(index)%waist, b%src(index)%napr, nfocus
@@ -1379,13 +1384,24 @@ CONTAINS
   SUBROUTINE read_crst(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
-    INTEGER :: fid=10, iovar, n, ns
+    INTEGER :: fid=10, iovar, n, ns, medium_index, domain_index
     REAL (KIND=dp) :: csca, cabs, wl
     REAL (KIND=dp), DIMENSION(b%nwl,3) :: data
-    REAL (KIND=dp) :: omega
+    REAL (KIND=dp) :: omega, factor
     COMPLEX (KIND=dp) :: ri
     TYPE(srcdata) :: nlsrc
     CHARACTER (LEN=256) :: oname, numstr
+
+    ! Can be set to -1 if boundary orientation is to be flipped.
+    factor = 1.0_dp
+
+    medium_index = 1
+
+    domain_index = 1
+
+    IF(LEN_TRIM(line)/=0) THEN
+       READ(line,*) medium_index, domain_index, factor
+    END IF
 
     WRITE(*,*) 'Computing extinction cross-section'
 
@@ -1393,21 +1409,22 @@ CONTAINS
     DO ns=1,SIZE(b%src)
 
        !$OMP PARALLEL DEFAULT(NONE)&
-       !$OMP SHARED(b,data,ns)&
+       !$OMP SHARED(b,data,ns,medium_index,domain_index,factor)&
        !$OMP PRIVATE(n,omega,ri,wl,csca,cabs)
        !$OMP DO SCHEDULE(STATIC)
        DO n=1,b%nwl
           wl = b%sols(n)%wl
           
           omega = 2.0_dp*pi*c0/wl
-          ri = b%media(b%domains(1)%medium_index)%prop(n)%ri
+          !ri = b%media(b%domains(1)%medium_index)%prop(n)%ri
+          ri = b%media(medium_index)%prop(n)%ri
           
-          CALL cs_prtsrf(b%domains(1)%mesh, b%mesh%nedges, omega, ri, b%ga,&
+          CALL cs_prtsrf(b%domains(domain_index)%mesh, b%mesh%nedges, omega, ri, b%ga,&
                b%sols(n)%x(:,:,ns), b%src(ns), b%qd_tri, csca, cabs)
           
           data(n,1) = wl
-          data(n,2) = csca
-          data(n,3) = cabs
+          data(n,2) = csca*factor
+          data(n,3) = cabs*factor
           
           WRITE(*,'(A,I0,A,I0,:)') ' Wavelength ',  n, ' of ', b%nwl
        END DO
@@ -1428,21 +1445,21 @@ CONTAINS
        DO ns=1,SIZE(b%src)
           
           !$OMP PARALLEL DEFAULT(NONE)&
-          !$OMP SHARED(b,data,nlsrc,ns)&
+          !$OMP SHARED(b,data,nlsrc,ns,medium_index,domain_index,factor)&
           !$OMP PRIVATE(n,omega,ri,wl,csca,cabs)
           !$OMP DO SCHEDULE(STATIC)
           DO n=1,b%nwl
              wl = b%sols(n)%wl
              
              omega = 2.0_dp*pi*c0/wl
-             ri = b%media(b%domains(1)%medium_index)%prop(n)%shri
+             ri = b%media(medium_index)%prop(n)%shri
              
-             CALL cs_prtsrf(b%domains(1)%mesh, b%mesh%nedges, 2.0_dp*omega, ri, b%ga,&
+             CALL cs_prtsrf(b%domains(domain_index)%mesh, b%mesh%nedges, 2.0_dp*omega, ri, b%ga,&
                   b%sols(n)%nlx(:,:,ns), nlsrc, b%qd_tri, csca, cabs)
              
              data(n,1) = wl
-             data(n,2) = csca
-             data(n,3) = cabs
+             data(n,2) = csca*factor
+             data(n,3) = cabs*factor
              
              WRITE(*,'(A,I0,A,I0,:)') ' Wavelength ',  n, ' of ', b%nwl
           END DO
@@ -1627,6 +1644,8 @@ CONTAINS
 
        IF(LEN_TRIM(line)>LEN_TRIM(scmd)) THEN
           line = line((LEN_TRIM(scmd)+1):LEN_TRIM(line))
+       ELSE
+          line = ''
        END IF
 
        IF(stat<0 .OR. scmd=='exit') THEN
