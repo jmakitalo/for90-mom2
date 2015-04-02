@@ -1,3 +1,7 @@
+! MODULE: pec
+! AUTHOR: Jouni Makitalo
+! DESCRIPTION:
+! Routines to simulate scattering from perfect electric conductor (PEC) objects.
 MODULE pec
   USE sysmat
   USE source
@@ -6,6 +10,7 @@ MODULE pec
   IMPLICIT NONE
 
 CONTAINS
+  ! Calculates modes of PEC object at angular frequency omega.
   SUBROUTINE pec_modes(meshfile, scale, omega)
     CHARACTER (LEN=*), INTENT(IN) :: meshfile
     REAL (KIND=dp), INTENT(IN) :: scale, omega

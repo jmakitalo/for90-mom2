@@ -1,3 +1,7 @@
+! MODULE: solver_vie
+! AUTHOR: Jouni Makitalo
+! DESCRIPTION:
+! High-level simulation routines for volume integral method.
 MODULE solver_vie
   USE time
   USE vie

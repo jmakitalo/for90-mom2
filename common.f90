@@ -1,8 +1,9 @@
 ! MODULE: common
 ! AUTHOR: Jouni Makitalo
 ! DESCRIPTION:
-! Implements various types for the description of scattering
-! problems, including media and domains.
+! Implements various data aggregation types for the description of scattering
+! problems, including media and domains. These form the basis for the high-level
+! code that is used to define certain types of problems via the user interface.
 MODULE common
   USE source
   USE greenprd

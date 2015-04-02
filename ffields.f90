@@ -11,6 +11,8 @@ MODULE ffields
   IMPLICIT NONE
 
 CONTAINS
+  ! Calculates the far-fields of E and H fields in spherical coordinates in the observation
+  ! direction (theta,phi) at distance r.
   SUBROUTINE far_fields(mesh, nedgestot, omega, ri, ga, x, r, theta, phi, qd, et, ep, ht, hp)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, INTENT(IN) :: nedgestot
@@ -121,6 +123,7 @@ CONTAINS
 
   ! Radar cross-section integrated over solid angle theta_max
   ! around the z-axis in +z-direction.
+  ! This routine is deprecated as it uses the fixed-order Simpson quadrature.
   SUBROUTINE rcs_solangle_old(mesh, nedgestot, omega, ri, ga, x, theta_max, qd, scatp)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, INTENT(IN) :: nedgestot
@@ -160,6 +163,8 @@ CONTAINS
 
   END SUBROUTINE rcs_solangle_old
 
+  ! Radar cross-section integrated over solid angle range [theta1,theta2].
+  ! around the z-axis in +z-direction.
   SUBROUTINE rcs_solangle(mesh, nedgestot, omega, ri, ga, x, theta1, theta2, qd, scatp)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, INTENT(IN) :: nedgestot
@@ -243,6 +248,7 @@ CONTAINS
     !$OMP END PARALLEL
   END SUBROUTINE rcs_ext
 
+  ! Bistatic radar-cross section a.k.a. radiated power per unit solid angle.
   SUBROUTINE rcs(mesh, nedgestot, omega, ri, ga, x, ntheta, nphi, qd, rcsdata)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, INTENT(IN) :: nedgestot

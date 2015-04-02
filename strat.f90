@@ -1,3 +1,7 @@
+! MODULE: strat
+! AUTHOR: Jouni Makitalo
+! DESCRIPTION:
+! Implementation of stratified medium Green's function. Work in progress.
 MODULE strat
   USE mesh
   USE quad

@@ -1,3 +1,8 @@
+! MODULE: vie
+! AUTHOR: Jouni Makitalo
+! DESCRIPTION:
+! Implements matrix element and source vector evaluation for volume integral method
+! of scattering from dielectric/lossy objects.
 MODULE vie
   USE mesh
   USE rwgf

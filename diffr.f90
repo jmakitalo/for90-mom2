@@ -1,7 +1,7 @@
 ! MODULE: diffr
 ! AUTHOR: Jouni Makitalo
 ! DESCRIPTION:
-! Routines for computing diffracted power in periodic problems.
+! Routines for computing diffracted power in two-dimensionally periodic problems.
 MODULE diffr
   USE source
   USE nfields
@@ -9,10 +9,8 @@ MODULE diffr
 
   IMPLICIT NONE
 
-  INTEGER, PARAMETER :: max_prdsrc = 4
-  INTEGER, PARAMETER :: fresnel_nquad = 25
-
 CONTAINS
+  ! Far-field approximation of the periodic Green function (spectral series form).
   FUNCTION Gpff(r, rp, k, prd, i, j) RESULT(g)
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r, rp
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
@@ -57,6 +55,7 @@ CONTAINS
     g = g*(0,1)/(2*A)
   END FUNCTION Gpff
 
+  ! Far-field approximation of the periodic Green function gradient (spectral series form).
   FUNCTION gradGpff(r, rp, k, prd, i, j) RESULT(gg)
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r, rp
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
@@ -102,6 +101,7 @@ CONTAINS
     gg(:) = gg(:)/(2*A)
   END FUNCTION gradGpff
 
+  ! Computes the fields diffracted to order (i,j).
   SUBROUTINE diff_fields(mesh, ga, nf, x, nedgestot, omega, ri, prd, r, i, j, qd, e, h)
     TYPE(mesh_container), INTENT(IN) :: mesh
     COMPLEX (KIND=dp), INTENT(IN) :: ri
@@ -158,6 +158,9 @@ CONTAINS
     END DO
   END SUBROUTINE diff_fields
 
+  ! Calculates the irradiance diffracted to order (i,j).
+  ! Can also simulate a linear polarization filter at detector.
+  ! Assumes that the diffracted fields propagate to half-space z<0.
   FUNCTION diff_irradiance(mesh, ga, addsrc, src, x, nedgestot, omega, ri, ri_inc, prd, i, j, qd,&
        polarize, polangle) RESULT(irr)
     TYPE(mesh_container), INTENT(IN) :: mesh
@@ -233,6 +236,8 @@ CONTAINS
 
   END FUNCTION diff_irradiance
 
+  ! Calculates the transmittance to half-space z<0 or z>0 by integrating the Poynting vector
+  ! in the near-field. All diffraction orders are then included.
   FUNCTION transmittance(mesh, ga, addsrc, src, x, nedgestot, omega, ri, ri_inc, prd,&
        z0, zsign, qd) RESULT(power)
     TYPE(mesh_container), INTENT(IN) :: mesh

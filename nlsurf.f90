@@ -10,6 +10,7 @@ MODULE nlsurf
 
   IMPLICIT NONE
 
+  ! Description of the surface nonlinearity of material.
   TYPE medium_nls
      COMPLEX (KIND=dp) :: chi2_nnn
      COMPLEX (KIND=dp) :: chi2_ntt

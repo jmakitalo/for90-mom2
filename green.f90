@@ -3,7 +3,8 @@
 ! DESCRIPTION:
 ! Implements the fundamental Green's function and its gradient
 ! for the Helmholtz operator. Also the smoothed (singularity subtracted)
-! versions are implemented here.
+! versions are implemented here. Routines with prefix 'v' are vectorized.
+! Routines with ending 's' are the smoothed functions.
 MODULE green
   USE linalg
 

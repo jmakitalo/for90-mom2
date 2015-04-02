@@ -1,7 +1,7 @@
 ! MODULE: bessel
 ! AUTHOR: Jouni Makitalo
 ! DESCRIPTION:
-! Implements the Bessel function.
+! Implements the Bessel function of the first kind for real arguments.
 MODULE bessel
   USE constants
 

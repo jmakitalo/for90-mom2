@@ -15,6 +15,17 @@ MODULE nfields
   END TYPE nfield_plane
 
 CONTAINS
+  ! Scattered fields at position r.
+  ! mesh: boundary mesh of the domain.
+  ! ga: symmetry groups actions.
+  ! nedgestot: total number of edges in the problem geometry.
+  ! omega: angular frequency.
+  ! ri: refractive index in the domain.
+  ! prd: periodic GF data.
+  ! r: point of evaluation.
+  ! qd: quadrature routine data.
+  ! e: electric field (output).
+  ! h: magnetic field (output).
   SUBROUTINE scat_fields(mesh, ga, x, nedgestot, omega, ri, prd, r, qd, e, h)
     TYPE(mesh_container), INTENT(IN) :: mesh
     COMPLEX (KIND=dp), INTENT(IN) :: ri
@@ -43,6 +54,17 @@ CONTAINS
     END DO
   END SUBROUTINE scat_fields
 
+  ! Scattered fields at position p_g(r) for each group element g.
+  ! mesh: boundary mesh of the domain.
+  ! ga: symmetry groups actions.
+  ! nedgestot: total number of edges in the problem geometry.
+  ! omega: angular frequency.
+  ! ri: refractive index in the domain.
+  ! prd: periodic GF data.
+  ! r: point of evaluation.
+  ! qd: quadrature routine data.
+  ! e: electric field (output).
+  ! h: magnetic field (output).
   SUBROUTINE scat_fields_ga(mesh, ga, x, nedgestot, omega, ri, prd, r, qd, e, h)
     TYPE(mesh_container), INTENT(IN) :: mesh
     COMPLEX (KIND=dp), INTENT(IN) :: ri
@@ -104,6 +126,7 @@ CONTAINS
 !!$    END DO
 !!$  END SUBROUTINE scat_fields_invmap
 
+  ! Symmetrical scattered fields at position r for each group representation.
   SUBROUTINE scat_fields_frags(mesh, ga, x, nedgestot, omega, ri, prd, r, qd, e, h)
     TYPE(mesh_container), INTENT(IN) :: mesh
     COMPLEX (KIND=dp), INTENT(IN) :: ri

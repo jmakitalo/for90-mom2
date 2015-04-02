@@ -19,6 +19,8 @@ MODULE greenprd
      COMPLEX (KIND=dp) :: ri, ri0, k
   END TYPE prdcoef
 
+  ! Stores data for pre-computed periodic GF. This data is passed down to
+  ! routines that calculate potential integrals.
   TYPE prdnfo
      CHARACTER (LEN=256) :: filename
      INTEGER :: type

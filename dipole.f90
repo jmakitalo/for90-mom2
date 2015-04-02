@@ -10,6 +10,7 @@ MODULE dipole
   IMPLICIT NONE
 
 CONTAINS
+  ! Calculates the source vector for electric dipole excitation.
   SUBROUTINE srcvec_dipole(mesh, nedgestot, omega, ri, ga, dpos, dmom, qd, q)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, INTENT(IN) :: nedgestot
@@ -64,6 +65,7 @@ CONTAINS
     END DO
   END SUBROUTINE srcvec_dipole
 
+  ! Calculates the far-fields of electric dipole.
   SUBROUTINE dipoleff(r, dpos, dmom, omega, ri, E, H)
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r, dpos
     COMPLEX (KIND=dp), DIMENSION(3), INTENT(IN) :: dmom

@@ -1,8 +1,13 @@
+! MODULE: nlbulk
+! AUTHOR: Jouni Makitalo
+! DESCRIPTION:
+! Bulk nonlinear sources.
 MODULE nlbulk
   USE nfields
   
   IMPLICIT NONE
 
+  ! Properties of material bulk nonlinearity.
   TYPE medium_nlb
      COMPLEX (KIND=dp) :: delta_prime
      COMPLEX (KIND=dp) :: gamma

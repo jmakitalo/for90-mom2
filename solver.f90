@@ -388,6 +388,8 @@ CONTAINS
     END DO
   END FUNCTION is_nl_noncentrosym
 
+  ! Determines the 'primed' permittivity for each face of the surface mesh.
+  ! This permittivity if that of the complement domain just outside the boundary.
   SUBROUTINE determine_epsp(b, dindex, wlindex, epsp)
     TYPE(batch), INTENT(IN) :: b
     INTEGER, INTENT(IN) :: dindex, wlindex

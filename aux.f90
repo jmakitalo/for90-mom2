@@ -1,13 +1,16 @@
 ! MODULE: aux
 ! AUTHOR: Jouni Makitalo
 ! DESCRIPTION:
-! Auxiliary routines for various purposes.
+! Auxiliary routines for various purposes, such as string manipulation, file access and simple
+! mathematical tools. This module is a good candidate for refactorization in the future.
 MODULE aux
   USE constants
 
   IMPLICIT NONE
 
 CONTAINS
+  ! Finds nval smallest-in-magnitude values in val, whose size is dim.
+  ! Returns the linear indices to these values.
   FUNCTION find_smallest(val, dim, nval) RESULT(ind)
     COMPLEX (KIND=dp), DIMENSION(:), INTENT(IN) :: val
     INTEGER, INTENT(IN) :: dim, nval
@@ -30,6 +33,7 @@ CONTAINS
     END DO
   END FUNCTION find_smallest
 
+  ! Returns the three-letter filename extension of the filename.
   FUNCTION getext(filename) RESULT(ext)
     CHARACTER (LEN=*), INTENT(IN) :: filename
     CHARACTER (LEN=3) :: ext
@@ -40,6 +44,7 @@ CONTAINS
     ext = filename((n-2):n)
   END FUNCTION getext
 
+  ! Replaces the three-letter filename extension in filename with ext.
   SUBROUTINE replace_ext(filename, ext)
     CHARACTER (LEN=*), INTENT(INOUT) :: filename
     CHARACTER (LEN=3), INTENT(IN) :: ext
@@ -49,6 +54,7 @@ CONTAINS
     filename((n-2):n) = ext
   END SUBROUTINE replace_ext
 
+  ! Linear interpolation between start and end with t in [0,1].
   FUNCTION linterp(start, end, t) RESULT(res)
     REAL (KIND=dp), INTENT(IN) :: start, end, t
     REAL (KIND=dp) :: res
@@ -56,6 +62,7 @@ CONTAINS
     res = start + t*(end - start)
   END FUNCTION linterp
 
+  ! Reads a matrix from file.
   SUBROUTINE get_matrix(filename, mat, nrows, ncols)
     CHARACTER (LEN=*), INTENT(IN) :: filename
     INTEGER :: fid = 10, iovar, i
@@ -88,6 +95,8 @@ CONTAINS
 
   END SUBROUTINE get_matrix
 
+  ! Returns a complex refractive index value from the file for the given wavelength wl.
+  ! Linear interpolation is used.
   FUNCTION get_refind(filename, wl) RESULT(res)
     CHARACTER (LEN=*), INTENT(IN) :: filename
     REAL (KIND=dp), INTENT(IN) :: wl
@@ -157,6 +166,7 @@ CONTAINS
     res = 1.0_dp
   END FUNCTION get_refind
 
+  ! Finds from list the value that is closest to val and returns index to it.
   FUNCTION find_closest(val, list) RESULT(ind)
     REAL (KIND=dp), INTENT(IN) :: val
     REAL (KIND=dp), DIMENSION(:), INTENT(IN) :: list
@@ -178,6 +188,7 @@ CONTAINS
     END DO
   END FUNCTION find_closest
 
+  ! Writes matrix data to file.
   SUBROUTINE write_data(filename, data)
     REAL (KIND=dp), DIMENSION(:,:), INTENT(IN) :: data
     CHARACTER (LEN=*), INTENT(IN) :: filename
@@ -199,6 +210,7 @@ CONTAINS
     CLOSE(fid)
   END SUBROUTINE write_data
 
+  ! Writes complex matrix data to file. Complex numbers are written in the form x+iy.
   SUBROUTINE write_cdata(filename, data)
     COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(IN) :: data
     CHARACTER (LEN=*), INTENT(IN) :: filename
@@ -220,6 +232,7 @@ CONTAINS
     CLOSE(fid)
   END SUBROUTINE write_cdata
 
+  ! Evaluates the Drude model of noble metal dispersion at angular frequency omega.
   FUNCTION drude(omega, epsinf, omegap, gamma) RESULT(eps)
     COMPLEX (KIND=dp), INTENT(IN) :: omega
     REAL (KIND=dp), INTENT(IN) :: epsinf, omegap, gamma
@@ -228,6 +241,7 @@ CONTAINS
     eps = epsinf - omegap**2/(omega*(omega + (0,1)*gamma))
   END FUNCTION drude
 
+  ! Returns the direction vector for spherical polar angles theta and phi.
   FUNCTION get_dir(theta, phi) RESULT(dir)
     REAL (KIND=dp), INTENT(IN) :: theta, phi
     REAL (KIND=dp), DIMENSION(3) :: dir
@@ -235,6 +249,8 @@ CONTAINS
     dir = (/SIN(theta)*COS(phi), SIN(theta)*SIN(phi), COS(theta)/)
   END FUNCTION get_dir
 
+  ! Returns a 'polarization' vector of plane-wave propagating in direction given
+  ! by get_dir. The angle psi is the rotation of the polarization along the direction of propagation.
   FUNCTION get_pol(theta, phi, psi) RESULT(pol)
     REAL (KIND=dp), INTENT(IN) :: theta, phi, psi
     REAL (KIND=dp), DIMENSION(3) :: pol

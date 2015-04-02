@@ -1,8 +1,8 @@
 ! MODULE: quad
 ! AUTHOR: Jouni Makitalo
 ! DESCRIPTION:
-! Contains weights and points for mainly Gauss-Legendre quadrature over
-! triangles and tetrahedra.
+! Quadrature routines for integartion over triangles and tetrahedra (Gauss-Legendre).
+! Also routines for Simpson quadrature over interval and rectangle.
 MODULE quad
   USE mesh
 

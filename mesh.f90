@@ -2,8 +2,8 @@
 ! AUTHOR: Jouni Makitalo
 ! DESCRIPTION:
 ! Loading and manipulating meshes consisting of triangles and tetrahedra.
-! Supports the msh-format exported by Gmsh. Contains also functions for
-! splitting a mesh into submeshes and various mesh manipulation routines.
+! Supports the msh-format exported by Gmsh and the neutral mesh format of Netgen.
+! Contains also functions for splitting a mesh into submeshes and various mesh manipulation routines.
 MODULE mesh
   USE aux
   USE linalg

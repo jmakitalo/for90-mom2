@@ -9,6 +9,8 @@ MODULE cs
   IMPLICIT NONE
 
 CONTAINS
+  ! Computes scattering and absorption cross-sections by integrating the
+  ! equivalent surface current densities over the particle surface.
   SUBROUTINE cs_prtsrf(mesh, nedgestot, omega, ri, ga, x, src, qd, csca, cabs)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, INTENT(IN) :: nedgestot
@@ -101,6 +103,8 @@ CONTAINS
     csca = c*csca
   END SUBROUTINE cs_prtsrf
 
+  ! Computes scattering cross-section by integrating the far-field scattering amplitude over
+  ! a spherical surface.
   SUBROUTINE csca_ff(mesh, nedgestot, omega, ri, ga, x, qd, csca)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, INTENT(IN) :: nedgestot

@@ -896,8 +896,8 @@ CONTAINS
        WRITE(*,'(A,T7,F6.2,A,F6.2,A)') ' phase: (', REAL(src%phase), ', ', AIMAG(src%phase), ')'
     ELSE IF(src%type==src_focus_rad) THEN
        WRITE(*,*) 'source type: ', 'focus_rad'
-       WRITE(*,'(A,T16,E9.3)') ' focal length: ', src%focal
-       WRITE(*,'(A,T14,E9.3)') ' beam waist: ', src%waist
+       WRITE(*,'(A,T16,E10.3)') ' focal length: ', src%focal
+       WRITE(*,'(A,T14,E10.3)') ' beam waist: ', src%waist
        WRITE(*,'(A,T22,F6.2)') ' numerical aperture: ', src%napr
        IF(src%nfocus) THEN
           WRITE(*,*) 'normalized to maximum at focal plane'
@@ -906,8 +906,8 @@ CONTAINS
        END IF
     ELSE IF(src%type==src_focus_x) THEN
        WRITE(*,*) 'source type: ', 'focus_x'
-       WRITE(*,'(A,T16,E9.3)') ' focal length: ', src%focal
-       WRITE(*,'(A,T14,E9.3)') ' beam waist: ', src%waist
+       WRITE(*,'(A,T16,E10.3)') ' focal length: ', src%focal
+       WRITE(*,'(A,T14,E10.3)') ' beam waist: ', src%waist
        WRITE(*,'(A,T22,F6.2)') ' numerical aperture: ', src%napr
        IF(src%nfocus) THEN
           WRITE(*,*) 'normalized to maximum at focal plane'
@@ -916,8 +916,8 @@ CONTAINS
        END IF
     ELSE IF(src%type==src_focus_y) THEN
        WRITE(*,*) 'source type: ', 'focus_y'
-       WRITE(*,'(A,T16,E9.3)') ' focal length: ', src%focal
-       WRITE(*,'(A,T14,E9.3)') ' beam waist: ', src%waist
+       WRITE(*,'(A,T16,E10.3)') ' focal length: ', src%focal
+       WRITE(*,'(A,T14,E10.3)') ' beam waist: ', src%waist
        WRITE(*,'(A,T22,F6.2)') ' numerical aperture: ', src%napr
        IF(src%nfocus) THEN
           WRITE(*,*) 'normalized to maximum at focal plane'
@@ -926,8 +926,8 @@ CONTAINS
        END IF
     ELSE IF(src%type==src_focus_azim) THEN
        WRITE(*,*) 'source type: ', 'focus_azim'
-       WRITE(*,'(A,T16,E9.3)') ' focal length: ', src%focal
-       WRITE(*,'(A,T14,E9.3)') ' beam waist: ', src%waist
+       WRITE(*,'(A,T16,E10.3)') ' focal length: ', src%focal
+       WRITE(*,'(A,T14,E10.3)') ' beam waist: ', src%waist
        WRITE(*,'(A,T22,F6.2)') ' numerical aperture: ', src%napr
        IF(src%nfocus) THEN
           WRITE(*,*) 'normalized to maximum at focal plane'
@@ -936,8 +936,8 @@ CONTAINS
        END IF
     ELSE IF(src%type==src_focus_hg01) THEN
        WRITE(*,*) 'source type: ', 'focus_hg01'
-       WRITE(*,'(A,T16,E9.3)') ' focal length: ', src%focal
-       WRITE(*,'(A,T14,E9.3)') ' beam waist: ', src%waist
+       WRITE(*,'(A,T16,E10.3)') ' focal length: ', src%focal
+       WRITE(*,'(A,T14,E10.3)') ' beam waist: ', src%waist
        WRITE(*,'(A,T22,F6.2)') ' numerical aperture: ', src%napr
        IF(src%nfocus) THEN
           WRITE(*,*) 'normalized to maximum at focal plane'

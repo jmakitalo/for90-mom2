@@ -1,7 +1,8 @@
 ! MODULE: rwgf
 ! AUTHOR: Jouni Makitalo
 ! DESCRIPTION:
-! Routines for the evaluation of RWG basis functions.
+! Routines for the evaluation of RWG basis function and its surface divergence.
+! Routines with prefix 'v' are vectorized with respect to evaluation point.
 MODULE rwgf
   USE mesh
   USE quad
@@ -143,6 +144,7 @@ CONTAINS
     res = sign*A/vol
   END FUNCTION solid_rwgDiv
 
+  ! Computes numerically the RWG moment matrix that has elements M_mn = <f_m,f_n>.
   SUBROUTINE rwg_moments(mesh, qd, F)
     TYPE(mesh_container), INTENT(IN) :: mesh
     TYPE(quad_data), INTENT(IN) :: qd
@@ -218,6 +220,7 @@ CONTAINS
     END DO
   END SUBROUTINE rwg_moments
 
+  ! Computes numerically the RWG moment matrix that has elements M_mn = <normal x f_m,f_n>.
   SUBROUTINE rwg_moments2(mesh, qd, F)
     TYPE(mesh_container), INTENT(IN) :: mesh
     TYPE(quad_data), INTENT(IN) :: qd
