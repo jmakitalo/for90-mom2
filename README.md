@@ -4,7 +4,7 @@ FOR90-MOM2 USER'S GUIDE
 Author information
 ------------------
 
-Jouni Makitalo (jouni.makitalo@tut.fi)
+Jouni Mäkitalo (jouni.makitalo@tut.fi)
 Researcher at Tampere University of Technology (2011-2015)
 Department of Physics
 Optics Laboratory
@@ -19,8 +19,8 @@ Preface
 
 This is the user's guide to for90-mom2 Method of Moments electromagnetic wave scattering solver implemented in Fortran 90.
 
-This program is based on the theory and expressions derived in Master of Science Thesis (Jouni Makitalo, 2011).
-The nonlinear surface response code was developed in the Ph.D. Thesis (Jouni Makitalo, 2015).
+This program is based on the theory and expressions derived in Master of Science Thesis (Jouni Mäkitalo, 2011).
+The nonlinear surface response code was developed in the Ph.D. Thesis (Jouni Mäkitalo, 2015).
 
 The program is made for solving linear and weakly nonlinear scattering problems, where the particle size is on the order of the wavelength and whose material is described by a piece-wise constant complex permittivity. The following list gives the main features and application targets:
 
