@@ -4,9 +4,9 @@ FOR90-MOM2 USER'S GUIDE
 Author information
 ------------------
 
-Jouni Mäkitalo (jouni.makitalo@tut.fi)
-Researcher at Tampere University of Technology (2011-2015)
-Department of Physics
+Jouni Mäkitalo (jouni.makitalo@tut.fi)  
+Researcher at Tampere University of Technology (2011-2015)  
+Department of Physics  
 Optics Laboratory
 
 Disclaimer
@@ -129,14 +129,14 @@ In the following, brackets/braces are used to denote formal arguments of command
 
 The implementation uses SI units, so all parameters should represent values in this unit system.
 
-COMMAND: name [str]
-DESCRIPTION:
+COMMAND: name [str]  
+DESCRIPTION:  
 Sets the name of the computation. The name is used mainly to create output filenames. Avoid spaces and special characters in the name as this might cause trouble depending on the filesystem in use.
 
 Example: name 'myscatteringproblem'
 
-COMMAND: mesh [filename] [scale]
-DESCRIPTION:
+COMMAND: mesh [filename] [scale]  
+DESCRIPTION:  
 Loads the surface mesh that is used to construct the basis functions. The [filename] should point to a valid mesh file of some of the following formats:
 
 - Gmsh mesh (*.msh)
@@ -146,8 +146,8 @@ The [scale] is a real number that is used to scale the points in the meshfile in
 
 Example: mesh 'sphere.msh' 1E-9
 
-COMMAND: quad [tri] [tetra]
-DESCRIPTION:
+COMMAND: quad [tri] [tetra]  
+DESCRIPTION:  
 Quadrature rule for triangle and tetrahedron elements. Possible choises for [tri] are
 tri_gl1
 tri_gl3
@@ -162,24 +162,24 @@ tetra_gl11
 
 The number refers to the number of points.
 
-COMMAND: wlrg [nwl] [first] [last]
-DESCRIPTION:
+COMMAND: wlrg [nwl] [first] [last]  
+DESCRIPTION:  
 Allocates datastructures for amount of [nwl] computations, which will have wavelengths that are equally spaced from [first] to [last], including the endpoints.
 
 Example: wlrg 10 400E-9 1200E-9
 
-COMMAND: wlls [nwl] {wavelengths}
-DESCRIPTION:
+COMMAND: wlls [nwl] {wavelengths}  
+DESCRIPTION:  
 Allocated datastrctures for amount of [nwl] computations, which will have wavelengths given by the space separated list {wavelengths}.
 
 Example: wlls 3 300E-9 1.7E-6 2.3E-6
 
-COMMAND: nsrc [n]
-DESCRIPTION:
+COMMAND: nsrc [n]  
+DESCRIPTION:  
 Allocates space for [n] sources. Must be called prior to ssrc.
 
-COMMAND: ssrc [index] [type] {parameters}
-DESCRIPTION:
+COMMAND: ssrc [index] [type] {parameters}  
+DESCRIPTION:  
 Define the source of index [index] in the scattering problem. Currently following parameters are valid:
 
 [type] {parameters} ; description
@@ -206,20 +206,20 @@ Ez = E0*sin(psi)*sin(theta)
 
 Parameters [focal], [waist] and [na] denote focal length, beam waist and numerical aperture, respectively. If parameter [normalize] is 'true', then the fields are scaled by the maximum electric field at the focus. If parameter [normalize] is 'false', then the fields are normalized to the incident plane-wave incident of the focusing lens.
 
-COMMAND: scan [sz] [d] [npt]
-DESCRIPTION:
+COMMAND: scan [sz] [d] [npt]  
+DESCRIPTION:  
 Defines a special set of sources, where a source defined by a single 'ssrc' command is scanned over a square area of side length [d] over plane z = [sz]. The number of scan points is [npt]*[npt]. Example usage:
 
 nsrc 1
 ssrc 1 'focus_rad' 1e-3 0.8e-3 0.8 false
 scan 0 2e-6 20
 
-COMMAND: nmed [n]
-DESCRIPTION:
+COMMAND: nmed [n]  
+DESCRIPTION:  
 Allocates space for [n] media descriptors.
 
-COMMAND: smed [mindex] [type] [method] {parameters}
-DESCRIPTION:
+COMMAND: smed [mindex] [type] [method] {parameters}  
+DESCRIPTION:  
 Sets the medium of index [mindex]. The medium type [type] may be one of
 
 linear
@@ -237,24 +237,24 @@ For type 'nlsurf', only method 'value' is valid. Then {parameters} = [nnn] [ntt]
 
 For type 'nlbulk_nonlocal', only method 'value' is valid. Then {parameters} = [zzz] which is the zzz-component of the dipolar bulk second-order susceptibility (other components are zero).
 
-COMMAND: ndom [n]
-DESCRIPTION:
+COMMAND: ndom [n]  
+DESCRIPTION:  
 Sets the number of domains to [n].
 
-COMMAND: sdom [dindex] [nsurf] [surf_ids] [nvol] [vol_ids] [refind_file] [gf_index]
-DESCRIPTION:
+COMMAND: sdom [dindex] [nsurf] [surf_ids] [nvol] [vol_ids] [refind_file] [gf_index]  
+DESCRIPTION:  
 Sets domain parameters for domain of index [dindex]. Command ndom must be issued before this one. [nsurf] is the number of surfaces whose union constitutes the boundary of the domain in the mesh file. [surf_ids] are integers corresponding to the physical id:s of the surfaces. The integers may be also negative, which is interpreted so that the orientation of the corresponding surface is reversed. [nvol] in the number of volumes whose union constitutes the domain. This may be zero if the volume information is not required. [vol_ids] are integers corresponding to the physical id:s of the volumes (orientation is arbitrary). Parameter [refind_file] is a file name of the refractive index data to be used for the domain. Parameter [gf_index] is an index to a Green's function that has been loaded by command ipgf. A value of -1 corresponds to the nonperiodic Green's function.
 
 It is required that the boundary surface of a domain is oriented so that the normals point into the domain. Thus, if a surface id appears in one sdom expression, it must appear in another one with a minus sign.
 
 It is important to note that the domain, where the incident field is defined, always corresponds to dindex = 1.
 
-COMMAND: fdom
-DESCRIPTION:
+COMMAND: fdom  
+DESCRIPTION:  
 Finalizes the domain setup by dividing the given mesh into proper submeshes while keeping book on the edge connectivity. It also orients the basis function on the submeshes properly. This should be called right before solv.
 
-COMMAND: sbnd [id] [bndname]
-DESCRIPTION:
+COMMAND: sbnd [id] [bndname]  
+DESCRIPTION:  
 Assigns boundary values for edges with physical group [id]. The last argument is a string from the following list
 
 prdx1
@@ -265,8 +265,8 @@ prdy2
 which denote the two ends of the unit cell in z = constant plane. E.g. prdx1 corresponds to edge x = -px/2, where px is the period in the direction of the x-axis. Basis coefficients for edges on prdx1 and prdy1 are removed from the system and added to coefficients related to edges prdx2 and prdy2 with proper Bloch phase shifts. These conditions must be set if the mesh touches the unit cell boundaries.
 This routine must be called right after the 'mesh' command.
 
-COMMAND: symm [nsubgroups] {names}
-DESCRIPTION:
+COMMAND: symm [nsubgroups] {names}  
+DESCRIPTION:  
 Defines the symmetry of the geometry. The symmetry is described by a group, which is generated from the given subgroups. The number of these subgroups is [nsubgroups]. A number of [nsubgroups] names must follow. The list of valid names is
 
 
@@ -286,38 +286,38 @@ symm 2 mxp r3
 
 is not valid. No error checking is done, so this is user's responsibility.
 
-COMMAND: solv
-DESCRIPTION:
+COMMAND: solv  
+DESCRIPTION:  
 Solves the problem.
 
-COMMAND: nfms [wlindex] [srcindex] [dindex]
-DESCRIPTION:
+COMMAND: nfms [wlindex] [srcindex] [dindex]  
+DESCRIPTION:  
 Computes the electric and magnetic fields corresponding to source [srcindex] on the surface of domain [dindex] of the particle at wavelength determined by [wlindex]. Produces a msh-file which can be inspected in gmsh.
 
-COMMAND: crst
-DESCRIPTION:
+COMMAND: crst  
+DESCRIPTION:  
 Computes scattering and absoprtion cross-sections at all available wavelengths and sources.
 
-COMMAND: rcst [wlindex] [srcindex] [ntheta] [nphi]
-DESCRIPTION:
+COMMAND: rcst [wlindex] [srcindex] [ntheta] [nphi]  
+DESCRIPTION:  
 Computes the bi-static radar cross-section (a.k.a. scattering power per unit solid angle) using the solution denoted by [wlindex] and source of index [srcindex]. Parameters [ntheta] and [nphi] denote how many angular points are evaluated for elevation and azimuthal angles respectively.
 
-COMMAND: rcs2 [wlindex]
-DESCRIPTION:
+COMMAND: rcs2 [wlindex]  
+DESCRIPTION:  
 Computes the RCS integrated over the solid angle determined by a focused beam numerical aperture (in reflection). The solution at wavelength corresponding to [wlindex] is used.
 
-COMMAND: npgf [n]
-DESCRIPTION:
+COMMAND: npgf [n]  
+DESCRIPTION:  
 Allocate memory for [n] Green's functions. This must be called if periodic problems are to be solved.
 
-COMMAND: ipgf [index] [filename]
-DESCRIPTION:
+COMMAND: ipgf [index] [filename]  
+DESCRIPTION:  
 Loads the precalculated coefficients for a periodic Green's function from file given by [filename] and assigns the data to positive integer [index]. Command npgf must be issued prior to calling ipgf.
 
 The Green's function data is pre-computed by a MATLAB code made by the author. See the function file gpWlRange.m.
 
-COMMAND: diff [srcindex] [dindex] [orderx] [ordery] [pol] [polangle]
-DESCRIPTION:
+COMMAND: diff [srcindex] [dindex] [orderx] [ordery] [pol] [polangle]  
+DESCRIPTION:  
 Computes the diffracted power in the given order in a periodic problem. Integer [srcindex] refers to the excitation source. The integer [dindex] denotes the domain, where the calculation is done, i.e., which field expressions are used. Integers [orderx] and [ordery] denote the diffraction orders. [pol] may be 'true' or 'false' to specify whether a linear polarization filter is used when recording the diffracted wave. [polangle] is the polarizer angle in degrees (see diffr.f90 for the actual definition of the angle).
 
 It is assumed that the incident plane-wave propagates from half-space z>0 to half-space z<0.
