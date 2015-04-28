@@ -571,6 +571,65 @@ CONTAINS
     CALL import_pgfw_interp_1d(TRIM(filename), b%prd(index))
   END SUBROUTINE read_ipgw
 
+  SUBROUTINE read_fres(line, b)
+    CHARACTER (LEN=*), INTENT(IN) :: line
+    TYPE(batch), INTENT(INOUT) :: b
+    INTEGER :: fid=10, iovar, n, srcindex, drindex, dtindex, nf
+    REAL (KIND=dp) :: wl, omega, zr, zt
+    COMPLEX (KIND=dp) :: ri, r, t
+    COMPLEX (KIND=dp), DIMENSION(3) :: er, hr, et, ht
+    REAL (KIND=dp), DIMENSION(3) :: pol
+    TYPE(prdnfo), POINTER :: prd
+    CHARACTER (LEN=256) :: oname, numstr
+    TYPE(srcdata) :: src
+
+    ! Symmetry utilization not supported. Use the first fragment.
+    nf = 1
+
+    READ(line,*) srcindex, drindex, dtindex, zr, zt
+
+    src = b%src(srcindex)
+    pol = get_pol(src%theta, src%phi, src%psi)
+
+    WRITE(numstr, '(A,I0)') '-s', srcindex
+    oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-fresnel.dat'
+
+    OPEN(fid, FILE=oname, ACTION='WRITE', IOSTAT=iovar)
+    IF(iovar>0) THEN
+       WRITE(*,*) 'Could not open output file for Fresnel data!'
+       STOP
+    END IF
+
+    DO n=1,b%nwl
+       wl = b%sols(n)%wl
+       omega = 2.0_dp*pi*c0/wl
+
+       ! Reflected field.
+       ri = b%media(b%domains(drindex)%medium_index)%prop(n)%ri
+       prd => b%prd(b%domains(drindex)%gf_index)
+       prd%cwl = find_closest(wl, prd%coef(:)%wl)
+
+       CALL diff_fields(b%domains(drindex)%mesh, b%ga, 1, b%sols(n)%x(:,nf,srcindex), b%mesh%nedges, omega, ri,&
+            prd, (/0.0_dp,0.0_dp,zr/), 0, 0, b%qd_tri, er, hr)
+
+       ! Transmitted field.
+       ri = b%media(b%domains(dtindex)%medium_index)%prop(n)%ri
+       prd => b%prd(b%domains(dtindex)%gf_index)
+       prd%cwl = find_closest(wl, prd%coef(:)%wl)
+
+       CALL diff_fields(b%domains(dtindex)%mesh, b%ga, 1, b%sols(n)%x(:,nf,srcindex), b%mesh%nedges, omega, ri,&
+            prd, (/0.0_dp,0.0_dp,zt/), 0, 0, b%qd_tri, et, ht)
+
+       ! Fresnel coefficients: project field vectors to incident wave polarization vector.
+       r = dotc(CMPLX(pol,KIND=dp), er)
+       t = dotc(CMPLX(pol,KIND=dp), et)
+
+       WRITE(fid,*) wl, REAL(r), AIMAG(r), REAL(t), AIMAG(t)
+    END DO
+
+    CLOSE(fid)
+  END SUBROUTINE read_fres
+
   SUBROUTINE read_diff(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
@@ -1724,6 +1783,8 @@ CONTAINS
           CALL vie_eigen_spec()
        ELSe IF(scmd=='msrc') THEN
           CALL read_move_source(line, b)
+       ELSe IF(scmd=='fres') THEN
+          CALL read_fres(line, b)
        ELSE
           WRITE(*,*) 'Unrecognized command ', scmd, '!'
        END IF
