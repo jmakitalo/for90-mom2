@@ -624,7 +624,7 @@ CONTAINS
        r = dotc(CMPLX(pol,KIND=dp), er)
        t = dotc(CMPLX(pol,KIND=dp), et)
 
-       WRITE(fid,*) wl, REAL(r), AIMAG(r), REAL(t), AIMAG(t)
+       WRITE(fid,'(5EN25.15)') wl, REAL(r), AIMAG(r), REAL(t), AIMAG(t)
     END DO
 
     CLOSE(fid)
