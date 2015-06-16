@@ -60,4 +60,5 @@ nlbulk.f90
 rwgf.f90
 srcint.f90
 time.f90
+multipole.f90
 )
