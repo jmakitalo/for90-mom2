@@ -4,7 +4,7 @@ FOR90-MOM2 USER'S GUIDE
 Author information
 ------------------
 
-Jouni Mäkitalo (jouni.makitalo@tut.fi)  
+Jouni Mäkitalo (jmakitalo15@gmail.com)  
 Researcher at Tampere University of Technology (2011-2015)  
 Department of Physics  
 Optics Laboratory
