@@ -9,6 +9,14 @@ Researcher at Tampere University of Technology (2011-2015)
 Department of Physics  
 Optics Laboratory
 
+References
+----------
+
+The code was developed for my Ph.D. thesis:
+
+"Boundary Integral Operators in Linear and Second-order Nonlinear Nano-optics"
+http://URN.fi/URN:ISBN:978-952-15-3539-0 
+
 Disclaimer
 ----------
 
@@ -25,6 +33,7 @@ The nonlinear surface response code was developed in the Ph.D. Thesis (Jouni Mä
 The program is made for solving linear and weakly nonlinear scattering problems, where the particle size is on the order of the wavelength and whose material is described by a piece-wise constant complex permittivity. The following list gives the main features and application targets:
 
 - Computation of full-wave solutions to electromagnetic scattering problems
+- PMCHWT boundary element formulation of dielectric and lossy piece-wise homogeneous scatterers
 - Deduce scattering and absorption cross-sections, near-fields and radiation patterns
 - Excitations: plane-wave, focused Gaussian beams, electric dipole
 - Enforce symmetries and decompose solutions from their irreducible representations
