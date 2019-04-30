@@ -11,11 +11,19 @@ if(BUILD_TYPE MATCHES "release")
 
  # Support OpenMP.
  # May want to add also "-vec-report1" to get vectorization reports.
- set(CMAKE_Fortran_FLAGS "-fpp -openmp -parallel -O2")
+ if(CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
+	set(CMAKE_Fortran_FLAGS "-fpp -openmp -parallel -O2")
+ elseif(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
+	set(CMAKE_Fortran_FLAGS " -fopenmp -O2 -ffree-line-length-0")
+ endif()
 elseif(BUILD_TYPE MATCHES "debug")
  message("Building debug")
 
- set(CMAKE_Fortran_FLAGS "-g")
+ if(CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
+	set(CMAKE_Fortran_FLAGS "-g")
+ elseif(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
+	set(CMAKE_Fortran_FLAGS "-g -fcheck=all -fbounds-check -fbacktrace -ffree-line-length-0")
+ endif()
 elseif(BUILD_TYPE MATCHES "profile")
  message("Building profile")
 
@@ -24,10 +32,29 @@ else()
 	message(FATAL_ERROR "Invalid build type!")
 endif()
 
-set(CMAKE_EXE_LINKER_FLAGS "-mkl")
+
+#---- run libraries check ----
+message("---- Checking installed libraries")
+# check MKL root folder
+if(DEFINED ENV{MKLROOT})
+	# set bash environment variable to CMAKE variable
+	set(MKLROOT "$ENV{MKLROOT}")
+	message("---- -- The intel mkl root folder: ${MKLROOT}")
+else()
+	message("---- -- The MKLROOT is not set, use default folder!")
+	set(MKLROOT "/worktmp/intel/mkl")
+endif()
+
+ if(CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
+	set(CMAKE_EXE_LINKER_FLAGS "-mkl")
+ elseif(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
+	set(CMAKE_EXE_LINKER_FLAGS "-Wl,--no-as-needed -L${MKLROOT}/lib/intel64 -L${MKLROOT}/../compiler/lib/intel64 -lmkl_gf_lp64 -lmkl_gnu_thread -lmkl_core -liomp5 -lpthread")
+ endif()
 
 add_executable(mom
-amos.f
+f77toms644/zbsubs.f
+f77toms644/zbesyh.f
+f77toms644/machcon.f
 aux.f90
 constants.f90
 ffields.f90

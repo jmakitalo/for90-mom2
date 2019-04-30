@@ -115,7 +115,8 @@ CONTAINS
     b%mesh_file = 'default.msh'
     b%scale = 1d-9
     b%nwl = 0
-    b%src%type = 0
+    ALLOCATE(b%src(1))
+    b%src(1)%type = 0
 
     b%qd_tri = tri_quad_data('tri_gl13')
     b%qd_tetra = tetra_quad_data('tetra_gl4')

@@ -23,12 +23,12 @@ CONTAINS
     WRITE(*,*) '--- Begin wavelength batch ---'
 
     ! Check that necessary input data exists.
-    IF(ALLOCATED(b%sols)==.FALSE.) THEN
+    IF(ALLOCATED(b%sols).EQV..FALSE.) THEN
        WRITE(*,*) 'Setup wavelengths prior to solving!'
        RETURN
     END IF
 
-    IF(ALLOCATED(b%mesh%nodes)==.FALSE.) THEN
+    IF(ALLOCATED(b%mesh%nodes).EQV..FALSE.) THEN
        WRITE(*,*) 'Load mesh prior to solving!'
        RETURN
     END IF
@@ -38,17 +38,17 @@ CONTAINS
        CALL compute_basis_data(b%mesh)
     END IF
 
-    IF(ALLOCATED(b%domains)==.FALSE.) THEN
+    IF(ALLOCATED(b%domains).EQV..FALSE.) THEN
        WRITE(*,*) 'Set up domains prior to solving!'
        RETURN
     END IF
 
-    IF(ALLOCATED(b%media)==.FALSE.) THEN
+    IF(ALLOCATED(b%media).EQV..FALSE.) THEN
        WRITE(*,*) 'Set up media prior to solving!'
        RETURN
     END IF
 
-    IF(ALLOCATED(b%src)==.FALSE.) THEN
+    IF(ALLOCATED(b%src).EQV..FALSE.) THEN
        WRITE(*,*) 'Set up source prior to solving!'
        RETURN
     END IF

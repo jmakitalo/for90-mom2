@@ -332,7 +332,7 @@ CONTAINS
 
     ! Copy the vertices.
     local_node_indices(:) = -1
-    submesh%nnodes = COUNT(nmask==.TRUE.)
+    submesh%nnodes = COUNT(nmask .EQV. .TRUE.)
     ALLOCATE(submesh%nodes(1:submesh%nnodes))
     m = 0
     DO n=1,mesh%nnodes
@@ -505,7 +505,7 @@ CONTAINS
 
              ! Compare local edge l to oriented local edges k.
              DO k=1,nchild
-                IF(oriented(k)==.FALSE.) THEN
+                IF(oriented(k) .EQV. .FALSE.) THEN
                    CYCLE
                 END IF
 
@@ -545,7 +545,7 @@ CONTAINS
 
           END DO
 
-          IF(COUNT(oriented==.TRUE.)==nchild) THEN
+          IF(COUNT(oriented .EQV. .TRUE.)==nchild) THEN
              EXIT
           END IF
        END DO
@@ -909,7 +909,7 @@ CONTAINS
 
     s = SIZE(array)
 
-    IF(ASSOCIATED(array)==.FALSE.) THEN
+    IF(ASSOCIATED(array) .EQV. .FALSE.) THEN
        ALLOCATE(array(1))
     ELSE
        ALLOCATE(temp(s))
@@ -930,7 +930,7 @@ CONTAINS
 
     res = .FALSE.
 
-    IF(ASSOCIATED(array)==.FALSE.) THEN
+    IF(ASSOCIATED(array) .EQV. .FALSE.) THEN
        RETURN
     END IF
 
@@ -973,7 +973,8 @@ CONTAINS
   FUNCTION cmp_triplets(triplet1, triplet2) RESULT(res)
     INTEGER, DIMENSION(3), INTENT(IN) :: triplet1, triplet2
     LOGICAL :: res
-    INTEGER, PARAMETER, DIMENSION(3,6) :: indices = (/1,2,3, 1,3,2, 2,1,3, 2,3,1, 3,1,2, 3,2,1/)
+    INTEGER, PARAMETER, DIMENSION(3,6) :: indices = RESHAPE( &
+      (/1,2,3, 1,3,2, 2,1,3, 2,3,1, 3,1,2, 3,2,1/), (/3,6/) )
     INTEGER :: i
 
     res = .FALSE.
@@ -1092,7 +1093,7 @@ CONTAINS
              END IF
           END DO
 
-          IF(found_edge==.FALSE.) THEN
+          IF(found_edge .EQV. .FALSE.) THEN
              ! Add new edge.
              cedge = cedge + 1
              tmpedges(cedge)%node_indices = pair
@@ -1185,7 +1186,7 @@ CONTAINS
              END IF
           END DO
 
-          IF(found_face==.FALSE.) THEN
+          IF(found_face .EQV. .FALSE.) THEN
              ! Add new face.
              cface = cface + 1
              tmpfaces(cface)%node_indices = triplet

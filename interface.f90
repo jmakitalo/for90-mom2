@@ -49,12 +49,13 @@ CONTAINS
     INTEGER, DIMENSION(:), POINTER :: vol_ids
     CHARACTER (LEN=256) :: numstr, oname
 
-    IF(ALLOCATED(b%domains)==.FALSE.) THEN
+    IF(ALLOCATED(b%domains) .EQV. .FALSE.) THEN
+
        WRITE(*,*) 'Error: no domains allocated!'
        STOP
     END IF
 
-    IF(ALLOCATED(b%mesh%faces)==.FALSE.) THEN
+    IF(ALLOCATED(b%mesh%faces) .EQV. .FALSE.) THEN
        WRITE(*,*) 'Error: master mesh has not been loaded!'
        STOP
     END IF
@@ -109,10 +110,13 @@ CONTAINS
     TYPE(batch), INTENT(INOUT) :: b
     CHARACTER (LEN=256) :: numstr, oname
     INTEGER :: i
+    TYPE(mesh_container), DIMENSION(:), ALLOCATABLE :: submeshes
 
     CALL determine_edge_couples(b%mesh, 1D-12)
-    CALL submesh_edge_connectivity(b%mesh, b%domains(:)%mesh)
-    CALL orient_basis(b%mesh, b%domains(:)%mesh)
+    submeshes = b%domains(:)%mesh
+    CALL submesh_edge_connectivity(b%mesh, submeshes )
+    CALL orient_basis(b%mesh, submeshes )
+    b%domains(:)%mesh = submeshes
 
     !CALL export_mesh(TRIM(b%name) // '.pmf', b%mesh)
     !DO i=1,SIZE(b%domains)
@@ -215,7 +219,7 @@ CONTAINS
     TYPE(batch), INTENT(INOUT) :: b
     INTEGER :: n, i
 
-    IF(ALLOCATED(b%sols)==.FALSE.) THEN
+    IF(ALLOCATED(b%sols) .EQV. .FALSE.) THEN
        WRITE(*,*) 'Error: no wavelengths set up!'
        RETURN
     END IF
@@ -240,7 +244,7 @@ CONTAINS
     COMPLEX (KIND=dp) :: val
     REAL (KIND=dp), DIMENSION(3,6) :: chi2
 
-    IF(ALLOCATED(b%media)==.FALSE.) THEN
+    IF(ALLOCATED(b%media) .EQV. .FALSE.) THEN
        WRITE(*,*) 'Error: no media allocated!'
        RETURN
     END IF
@@ -412,7 +416,7 @@ CONTAINS
     REAL (KIND=dp) :: sz, d
     TYPE(srcdata) :: src
 
-    IF(ALLOCATED(b%src)==.FALSE.) THEN
+    IF(ALLOCATED(b%src) .EQV. .FALSE.) THEN
        WRITE(*,*) 'Source must be setup before specifying scanning!'
        STOP
     END IF
@@ -446,7 +450,7 @@ CONTAINS
     REAL (KIND=dp), DIMENSION(3) :: pos
     TYPE(srcdata) :: src
 
-    IF(ALLOCATED(b%src)==.FALSE.) THEN
+    IF(ALLOCATED(b%src) .EQV. .FALSE.) THEN
        WRITE(*,*) 'Source must be setup before specifying move transform!'
        STOP
     END IF
@@ -464,7 +468,10 @@ CONTAINS
 
     READ(line,*) n
 
-    ALLOCATE(b%src(n))
+    IF(ALLOCATED(b%src) .EQV. .TRUE.) THEN
+			DEALLOCATE(b%src)
+			ALLOCATE(b%src(n))
+		END IF
 
     WRITE(*,'(A,I0,A)') ' Allocated ', n, ' sources.'
   END SUBROUTINE read_nsrc
@@ -491,7 +498,7 @@ CONTAINS
     CHARACTER (LEN=3) :: ext
     INTEGER :: nga, nfrags, index
 
-    IF(ALLOCATED(b%src)==.FALSE.) THEN
+    IF(ALLOCATED(b%src) .EQV. .FALSE.) THEN
        WRITE(*,*) 'No sources allocated!'
        STOP
     END IF
@@ -1650,6 +1657,8 @@ CONTAINS
 
        IF(stat<0 .OR. scmd=='exit') THEN
           EXIT
+       ELSE IF(scmd=='#') THEN
+          CYCLE
        ELSE IF(scmd=='name') THEN
           READ(line,*) b%name
        ELSE IF(scmd=='mesh') THEN

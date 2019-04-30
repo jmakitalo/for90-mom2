@@ -13,9 +13,10 @@ MODULE symmetry
 
   IMPLICIT NONE
 
-  REAL (KIND=dp), DIMENSION(3,3), PARAMETER :: id33r = (/1.0_dp,0.0_dp,0.0_dp,&
-       0.0_dp,1.0_dp,0.0_dp,&
-       0.0_dp,0.0_dp,1.0_dp/)
+  REAL (KIND=dp), DIMENSION(3,3), PARAMETER :: id33r = RESHAPE( &
+      (/1.0_dp,0.0_dp,0.0_dp, &
+       0.0_dp,1.0_dp,0.0_dp,  &
+       0.0_dp,0.0_dp,1.0_dp/), (/3,3/) )
 
   INTEGER, PARAMETER :: gid_identity = 1,&
        gid_mxp = 2,&

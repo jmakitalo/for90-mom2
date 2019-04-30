@@ -25,7 +25,8 @@ MODULE vie
        0.932469514203152_dp, -0.932469514203152_dp/)
 
   ! Index permutation for last three indices of 4 sub-tetrahedra.
-  INTEGER, DIMENSION(3,4), PARAMETER :: subsolidind = (/1,2,3,  2,3,4, 3,4,1,  1,2,4/)
+  INTEGER, DIMENSION(3,4), PARAMETER :: subsolidind = RESHAPE( &
+       (/1,2,3,  2,3,4, 3,4,1,  1,2,4/), (/3,4/))
 
 CONTAINS
   SUBROUTINE rcs_vie(mesh, k, ga, prd, qd_tetra, xi, x, ntheta, nphi, rcsdata)

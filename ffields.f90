@@ -234,7 +234,7 @@ CONTAINS
 
           CALL far_fields(mesh, nedgestot, omega, ri, ga, x, r, theta, phi, qd, et, ep, ht, hp)
 
-          IF(filter==.FALSE.) THEN
+          IF(filter .EQV. .FALSE.) THEN
              rcsdata(n,m) = c*(ABS(et)**2 + ABS(ep)**2)
           ELSE
              vtheta = (/COS(phi)*COS(theta), SIN(phi)*COS(theta), -SIN(theta)/)

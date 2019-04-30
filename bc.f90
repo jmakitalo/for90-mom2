@@ -244,13 +244,13 @@ CONTAINS
 
     IF(exterior) THEN
        RETURN
-    ELSE IF(BTEST(ga%genbits, gid_mxp) .AND. has_mesh_bnd(mesh, mesh_bnd_xplane)==.FALSE.) THEN
+    ELSE IF(BTEST(ga%genbits, gid_mxp) .AND. (has_mesh_bnd(mesh, mesh_bnd_xplane) .EQV. .FALSE.)) THEN
        res = .FALSE.
-    ELSE IF(BTEST(ga%genbits, gid_myp) .AND. has_mesh_bnd(mesh, mesh_bnd_yplane)==.FALSE.) THEN
+    ELSE IF(BTEST(ga%genbits, gid_myp) .AND. (has_mesh_bnd(mesh, mesh_bnd_yplane) .EQV. .FALSE.)) THEN
        res = .FALSE.
-    ELSE IF(BTEST(ga%genbits, gid_mzp) .AND. has_mesh_bnd(mesh, mesh_bnd_zplane)==.FALSE.) THEN
+    ELSE IF(BTEST(ga%genbits, gid_mzp) .AND. (has_mesh_bnd(mesh, mesh_bnd_zplane) .EQV. .FALSE.)) THEN
        res = .FALSE.
-    ELSE IF(BTEST(ga%genbits, gid_rz) .AND. has_mesh_bnd(mesh, mesh_bnd_rz1)==.FALSE.) THEN
+    ELSE IF(BTEST(ga%genbits, gid_rz) .AND. (has_mesh_bnd(mesh, mesh_bnd_rz1) .EQV. .FALSE.)) THEN
        res = .FALSE.
     END IF
 

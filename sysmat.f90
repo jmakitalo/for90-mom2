@@ -54,7 +54,7 @@ CONTAINS
 
        ! Loop through group actions.
        DO ns=1,SIZE(b%ga)
-          IF(admissible_ga(b%domains(nd)%mesh, b%ga(ns), nd==1)==.FALSE.) THEN
+          IF(admissible_ga(b%domains(nd)%mesh, b%ga(ns), nd==1).EQV..FALSE.) THEN
              CYCLE
           END IF
 
@@ -153,7 +153,7 @@ CONTAINS
 
        ! Loop through actions.
        DO ns=1,SIZE(b%ga)
-          IF(admissible_ga(b%domains(nd)%mesh, b%ga(ns), nd==1)==.FALSE.) THEN
+          IF(admissible_ga(b%domains(nd)%mesh, b%ga(ns), nd==1).EQV..FALSE.) THEN
              CYCLE
           END IF
 

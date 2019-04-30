@@ -389,7 +389,8 @@ CONTAINS
     COMPLEX (KIND=dp) :: phase
     LOGICAL :: singular
 
-    IF(ga%id==gid_identity .AND. faceind==tfaceind .AND. ASSOCIATED(prd)==.FALSE.) THEN
+    IF(ga%id==gid_identity .AND. faceind==tfaceind .AND. &
+      (ASSOCIATED(prd) .EQV. .FALSE.)) THEN
        res(:,:) = 0.0_dp
        RETURN
     END IF

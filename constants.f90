@@ -4,7 +4,6 @@
 ! Various constants for general use.
 MODULE constants
   IMPLICIT NONE
-  INTRINSIC SQRT
   INTEGER, PARAMETER :: dp = SELECTED_REAL_KIND(12)
   REAL (KIND=dp), PARAMETER :: &
        pi = 3.141592653589, &

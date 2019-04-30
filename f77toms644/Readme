@@ -1,0 +1,132 @@
+C*** Readme
+             INSTALLATION HINTS FOR ALGORITHM 644
+
+                          D. E. AMOS
+                 Sandia National Laboratories
+-----------------------------------------------------------------
+
+Algorithm 644 [2],[3] computes all major Bessel functions of a
+complex argument and nonnegative order.  The single precision
+callable routines are denoted by CBESH, CBESI, CBESJ, CBESK,
+CBESY, CAIRY AND CBIRY for the H, I, J, K, Y, and Airy functions
+Ai and Bi. The corresponding double precision routines start with
+Z in place of C. CBESH and ZBESH compute H functions of kinds 1
+and 2 and an option exists for the derivatives of the Airy
+functions in CAIRY, ZAIRY, CBIRY, and ZBIRY. Scaling to remove
+exponential underflow or overflow and generation of sequences in
+increasing orders are auxilliary options where appropriate.
+
+It is convenient to consider the package in four parts:
+
+   (1) Quick check PROGRAMS (CQC?? or ZQC??) which exercise the
+       main callable routines in single and double precision
+       arithmetic:
+
+          CQCBH and ZQCBH  to test CBESH and ZBESH
+          CQCBI and ZQCBI  to test CBESI and ZBESI
+          CQCBJ and ZQCBJ  to test CBESJ and ZBESJ
+          CQCBK and ZQCBK  to test CBESK and ZBESK
+          CQCBY and ZQCBY  to test CBESY and ZBESY
+          CQCAI and ZQCAI  to test CAIRY, ZAIRY, CBIRY and ZBIRY
+          and auxilliary subroutines CBESYH and ZBESYH
+
+       The documentation for the latest versions of these quick
+       checks is found in reference [4]. These routines need not
+       be a permanent part of the installation once they have
+       been compiled and successfully executed.
+
+   (2) The main callable subroutines which comprise the algorithm
+       in single and double precision arithmetic:
+
+          CBESH and ZBESH  for H functions of kinds 1 and 2
+          CBESI and ZBESI  for I functions
+          CBESJ and ZBESJ  for J functions
+          CBESK and ZBESK  for K functions
+          CBESY and ZBESY  for Y functions
+          CAIRY and ZAIRY  for Airy function Ai and Ai'
+          CBIRY and ZBIRY  for Airy function Bi and Bi'
+          GAMLN and DGAMLN for lngamma(x), x>0
+
+          The Z routines manipulate double precision ordered
+          pairs as double precision complex numbers and return
+          double precison ordered pairs as answers.  The lower
+          level routines
+
+          ZMLT,ZDIV,ZSQRT,ZEXP,ZLOG,ZSHCH,ZABS
+
+          provide a means of doing double precision complex
+          arithmetic on double precision ordered pairs. These can
+          also be called by user-coded routines to accomplish
+          double precision complex arithmetic. There are no ZADD
+          or ZSUB routines -- double precision complex additions
+          and subtractions are simple enough to do in-line.
+
+          Each subroutine or function has a prologue which
+          defines the calling sequence. These routines, along
+          with those of (3) and (4), make up the permanent
+          installation.
+
+   (3) Included in the algorithm are three (callable) function
+       subroutines which define the machine to the Bessel
+       function package.  These subroutines consist mainly of
+       comment lines which contain (inactive) FORTRAN statements
+       for machine constants such as real and double precision
+       unit roundoff, real and double precision overflow and
+       underflow limits, largest integer constant, base of
+       integer, real and double precision arithmetic, etc. for a
+       variety of machines. The prologue of each of these
+       functions
+
+       INTEGER          I1MACH(I)   I=1,16  for integer constants
+       REAL             R1MACH(I)   I=1,5   for real    constants
+       DOUBLE PRECISION D1MACH(I)   I=1,5   for double  precision
+                                            constants
+
+       defines the return value for each of the calling indices.
+
+       TO USE THE PACKAGE, YOU MUST DEFINE THE MACHINE ON WHICH
+       THE PACKAGE IS TO BE USED BY EDITING EACH OF THESE
+       FUNCTIONS.
+
+       With an editor, search out your machine from among those
+       listed in each ?1MACH function. A keyword like IBM, SUN,
+       VAX, CDC or PC is often helpful in locating the right
+       machine.  When your machine has been located, replace the
+       C in column 1 with a space to make each of the FORTRAN
+       statements active for the selected machine.
+
+       If your machine is not found, the correct constants can be
+       computed from the definitions in the prologue. It often
+       happens that many PC constants are close enough to the IBM
+       or SUN constants to work with the package. Reference [5]
+       should help in generating a set of machine constants. One
+       does not need constants accurate to the last bit and
+       leaving a little slack on arithmetic limits can sometimes
+       avoid hardware or software problems.
+
+   (4) Lower level non-callable routines
+
+The latest version containing all improvements is dated 930101.
+
+REFERENCES
+
+1. Abramowitz, M. and Stegun, I. A., Handbook of Mathematical
+   Functions, NBS Applied Math Series 55, U.S. Dept. of Commerce,
+   Washington, D.C., 1955
+
+2. Amos, D. E., Algorithm 644, A Portable Package For Bessel
+   Functions of a Complex Argument and Nonnegative Order, ACM
+   Transactions on Mathematical Software, Vol. 12, No. 3,
+   September 1986, Pages 265-273
+
+3. Amos, D. E., Remark on Algorithm 644, ACM Transactions on
+   Mathematical Software, Vol. 16, No. 4, December 1990, Page 404
+
+4. Amos, D. E., Remark on Algorithm 644 (Improvements in
+   Algorithm 644), ACM Transactions on Mathematical Software,
+   (Estimated date 1995)
+
+5. Cody, W. J., Algorithm 665, MACHAR: A Subroutine to
+   Dynamically Determine Machine Parameters, ACM Transactions on
+   Mathematical Software, Vol. 14, No. 4, December 1988, Pages
+   303-311
